@@ -1,0 +1,63 @@
+use miette::{Diagnostic, NamedSource, SourceSpan};
+use thiserror::Error;
+
+#[derive(Error, Debug, Diagnostic)]
+pub enum AppError {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Lexer(#[from] LexError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Parser(#[from] ParseError),
+}
+
+#[derive(Error, Debug, Diagnostic)]
+#[error("Invalid token or out-of-range integer")]
+#[diagnostic(
+    code(monocle::lex_error),
+    help(
+        "Use decimal integers in the i64 range, arithmetic operators, parentheses, or the int main() wrapper"
+    )
+)]
+pub struct LexError {
+    #[source_code]
+    pub src: NamedSource<String>,
+
+    #[label("Cannot lex this token")]
+    pub bad_token_span: SourceSpan,
+}
+
+impl LexError {
+    pub(crate) fn new(source: &str, span: std::ops::Range<usize>) -> Self {
+        Self {
+            src: NamedSource::new("input", source.to_string()),
+            bad_token_span: span.into(),
+        }
+    }
+}
+
+#[derive(Error, Debug, Diagnostic, PartialEq)]
+pub enum ParseError {
+    #[error("Unexpected token")]
+    #[diagnostic(code(monocle::unexpected_token))]
+    UnexpectedToken {
+        #[source_code]
+        src: NamedSource<String>,
+
+        #[label("Expected {expected}")]
+        span: SourceSpan,
+        expected: String,
+    },
+
+    #[error("Unexpected end of file: expected {expected}")]
+    #[diagnostic(code(monocle::unexpected_eof))]
+    UnexpectedEOF {
+        #[source_code]
+        src: NamedSource<String>,
+
+        #[label("Expected {expected}")]
+        span: SourceSpan,
+        expected: String,
+    },
+}
