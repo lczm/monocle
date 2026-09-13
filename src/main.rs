@@ -31,7 +31,7 @@ fn main() -> miette::Result<()> {
 
     let tokens = monocle::lex(&source)?;
     let expressions = monocle::parse(tokens, &source)?;
-    println!("{expressions:#?}");
+    print!("{}", monocle::codegen(expressions));
 
     Ok(())
 }
