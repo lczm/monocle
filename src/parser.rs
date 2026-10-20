@@ -42,14 +42,14 @@ pub(crate) struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: Vec<Token>, source: &'a str) -> Self {
+    pub(crate) fn new(tokens: Vec<Token>, source: &'a str) -> Self {
         Self {
             iter: tokens.into_iter().peekable(),
             src: source,
         }
     }
 
-    pub fn parse_program(&mut self) -> Result<Vec<Expr>, ParseError> {
+    pub(crate) fn parse_program(&mut self) -> Result<Vec<Expr>, ParseError> {
         let mut expressions = Vec::new();
 
         // hard code the int main
@@ -82,7 +82,7 @@ impl<'a> Parser<'a> {
         Ok(expressions)
     }
 
-    pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+    pub(crate) fn parse_expr(&mut self) -> Result<Expr, ParseError> {
         self.parse_additive()
     }
 
