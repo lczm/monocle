@@ -45,6 +45,24 @@ main:
 }
 
 #[test]
+fn unary_minus_applies_to_compound_operands() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 1
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 2
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	neg a0, a0
+	ret
+"#;
+    assert_eq!(compile("-(1 + 2)"), expected);
+}
+
+#[test]
 fn binary_operators_keep_left_and_right_operands_in_order() {
     for (operator, instruction) in [
         ("+", "add"),

@@ -50,8 +50,10 @@ pub enum TokenKind {
     Decrement,
 
     // Signs are operators so subtraction also works without whitespace: 1-2.
-    #[regex(r"[0-9]+", |lex| lex.slice().parse::<i64>().ok())]
-    Integer(i64),
+    // lex them as i128 instead of i64 so that we can detect overflow
+    // in the parser and report it as IntegerOverflow
+    #[regex(r"[0-9]+", |lex| lex.slice().parse::<i128>().ok())]
+    Integer(i128),
 }
 
 pub(crate) fn lex(source: &str) -> Result<Vec<Token>, LexError> {

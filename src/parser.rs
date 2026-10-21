@@ -145,8 +145,16 @@ impl<'a> Parser<'a> {
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         match self.peek() {
             Some(TokenKind::Integer(value)) => {
+                let span = self.iter.peek().unwrap().span;
                 self.iter.next();
-                Ok(Expr::Integer(value))
+                match i64::try_from(value) {
+                    Ok(value) => Ok(Expr::Integer(value)),
+                    Err(_) => Err(ParseError::IntegerOverflow {
+                        src: NamedSource::new("input", self.src.to_string()),
+                        span,
+                        value,
+                    }),
+                }
             }
             Some(TokenKind::LParen) => {
                 self.iter.next();

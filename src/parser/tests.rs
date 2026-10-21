@@ -153,6 +153,50 @@ fn report_missing_input_at_eof() {
 }
 
 #[test]
+fn parse_i64_max_literal_and_limits_style_min() {
+    // the i64::MIN -9223372036854775808 is represented as
+    // -9223372036854775807 - 1 in limits.h
+    assert_eq!(
+        parse("9223372036854775807").unwrap(),
+        vec![Expr::Integer(i64::MAX)]
+    );
+    assert_eq!(
+        parse("-9223372036854775807 - 1").unwrap(),
+        vec![binary(
+            BinaryOp::Subtract,
+            Expr::Unary {
+                op: UnaryOp::Minus,
+                operand: Box::new(Expr::Integer(i64::MAX)),
+            },
+            Expr::Integer(1),
+        )]
+    );
+}
+
+#[test]
+fn reject_integer_literals_outside_i64_range() {
+    for (source, span, value) in [
+        ("9223372036854775808", 0..19, 9223372036854775808_i128),
+        ("-9223372036854775808", 1..20, 9223372036854775808_i128),
+        ("-9223372036854775809", 1..20, 9223372036854775809_i128),
+        ("1 - 9223372036854775808", 4..23, 9223372036854775808_i128),
+    ] {
+        let error = parse(source).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                ParseError::IntegerOverflow {
+                    span: actual_span,
+                    value: actual_value,
+                    ..
+                } if actual_span == span.into() && actual_value == value
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn parse_supplied_tokens() {
     let source = "1 + 2";
     let mut tokens = lex(source).unwrap();

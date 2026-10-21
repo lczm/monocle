@@ -80,7 +80,7 @@ fn preserve_identifier_boundaries_and_compound_operators() {
 }
 
 #[test]
-fn report_invalid_tokens_and_overflow_with_spans() {
+fn report_invalid_tokens_with_spans() {
     for (source, span) in [
         ("@", 0..1),
         ("1 + @", 4..5),
@@ -88,10 +88,26 @@ fn report_invalid_tokens_and_overflow_with_spans() {
         ("int @", 4..5),
         ("int main() {} @", 14..15),
         ("1 + 🦀", 4..8),
-        ("9223372036854775808", 0..19),
+        // more than i128, it is a lex error
+        ("999999999999999999999999999999999999999", 0..39),
     ] {
         let error = lex(source).unwrap_err();
         assert_eq!(error.src.inner(), source);
         assert_eq!(error.bad_token_span, span.into());
     }
+}
+
+#[test]
+fn lex_i64_min_magnitude_and_i64_max() {
+    assert_eq!(
+        token_kinds(lex("-9223372036854775808").unwrap()),
+        vec![
+            TokenKind::Minus,
+            TokenKind::Integer(9223372036854775808_i128),
+        ]
+    );
+    assert_eq!(
+        token_kinds(lex("9223372036854775807").unwrap()),
+        vec![TokenKind::Integer(9223372036854775807_i128)]
+    );
 }

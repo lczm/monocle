@@ -60,4 +60,15 @@ pub enum ParseError {
         span: SourceSpan,
         expected: String,
     },
+
+    #[error("Integer literal out of i64 range: {value}")]
+    #[diagnostic(code(monocle::integer_overflow))]
+    IntegerOverflow {
+        #[source_code]
+        src: NamedSource<String>,
+
+        #[label("This literal doesn't fit in i64")]
+        span: SourceSpan,
+        value: i128,
+    },
 }
