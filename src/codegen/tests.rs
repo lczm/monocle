@@ -90,6 +90,34 @@ main:
 }
 
 #[test]
+fn comparison_operators_emit_set_instructions() {
+    for (operator, instructions) in [
+        ("<", "slt a0, t0, a0"),
+        (">", "slt a0, a0, t0"),
+        ("<=", "slt a0, a0, t0\n\txori a0, a0, 1"),
+        (">=", "slt a0, t0, a0\n\txori a0, a0, 1"),
+        ("==", "xor a0, t0, a0\n\tseqz a0, a0"),
+        ("!=", "xor a0, t0, a0\n\tsnez a0, a0"),
+    ] {
+        let expected = format!(
+            r#"	.text
+	.globl main
+main:
+	li a0, 20
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 3
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	{instructions}
+	ret
+"#
+        );
+        assert_eq!(compile(&format!("20 {operator} 3")), expected, "{operator}");
+    }
+}
+
+#[test]
 fn nested_expression_preserves_outer_left_operand() {
     let expected = r#"	.text
 	.globl main

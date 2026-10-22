@@ -56,20 +56,45 @@ fn emit_expr(expression: &Expr, assembly: &mut String) {
             // restore the stack pointer by the space we emitted initially
             emit_line(assembly, "addi sp, sp, 16");
 
-            let instruction = match op {
-                BinaryOp::Add => "add",
-                BinaryOp::Subtract => "sub",
-                BinaryOp::Multiply => "mul",
-                BinaryOp::Divide => "div",
-                BinaryOp::Modulo => "rem",
-                // not implemented
-                _ => unreachable!("comparison codegen not implemented yet"),
-            };
-            // for whichever binary instruction, we can just match to the RV64IM instruction
-            // t0 = LHS loaded
-            // a0 = RHS emitted
-            // a0 = t0 <op> a0
-            emit_line(assembly, &format!("{instruction} a0, t0, a0"));
+            // t0 = LHS (just popped), a0 = RHS (freshly evaluated).
+            match op {
+                BinaryOp::Add => emit_line(assembly, "add a0, t0, a0"),
+                BinaryOp::Subtract => emit_line(assembly, "sub a0, t0, a0"),
+                BinaryOp::Multiply => emit_line(assembly, "mul a0, t0, a0"),
+                BinaryOp::Divide => emit_line(assembly, "div a0, t0, a0"),
+                BinaryOp::Modulo => emit_line(assembly, "rem a0, t0, a0"),
+
+                // slt rd, rs1, rs2 sets rd = rs1 < rs2 (signed).
+                // slt rd, rs1, rs2 is rd = rs1 < rs2
+                // Less is LHS(t0) < RHS(a0)
+                // Greater iS LHS(t0) > RHS(a0) which is a0 < t0
+                BinaryOp::Less => emit_line(assembly, "slt a0, t0, a0"),
+                BinaryOp::Greater => emit_line(assembly, "slt a0, a0, t0"),
+                // <= / >= forms invert the set with a logical-not (xori 1).
+
+                // LessEqual is LHS(t0) <= RHS(a0) which is !(LHS(t0) > RHS(a0)) which is !(a0 < t0)
+                // slt a0, a0, t0 sets a0 = a0 < t0, then xori a0, a0, 1 flips to get !(a0 < t0)
+                BinaryOp::LessEqual => {
+                    emit_line(assembly, "slt a0, a0, t0");
+                    emit_line(assembly, "xori a0, a0, 1");
+                }
+                // GreaterEqual is LHS(t0) >= RHS(a0) which is !(LHS(t0) < RHS(a0)) which is !(t0 < a0)
+                BinaryOp::GreaterEqual => {
+                    emit_line(assembly, "slt a0, t0, a0");
+                    emit_line(assembly, "xori a0, a0, 1");
+                }
+
+                // LHS == RHS is !(LHS ^ RHS) which is !(t0 ^ a0)
+                BinaryOp::Equal => {
+                    emit_line(assembly, "xor a0, t0, a0");
+                    emit_line(assembly, "seqz a0, a0");
+                }
+                // LHS != RHS is (LHS ^ RHS) which is (t0 ^ a0)
+                BinaryOp::NotEqual => {
+                    emit_line(assembly, "xor a0, t0, a0");
+                    emit_line(assembly, "snez a0, a0");
+                }
+            }
         }
     }
 }
