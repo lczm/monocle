@@ -34,6 +34,12 @@ pub enum BinaryOp {
     Multiply,
     Divide,
     Modulo,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
 }
 
 pub(crate) struct Parser<'a> {
@@ -86,7 +92,49 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_additive()
+        self.parse_equality()
+    }
+
+    // equality = relational (("==" | "!=") relational)*
+    fn parse_equality(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_relational()?;
+        loop {
+            let op = match self.peek() {
+                Some(TokenKind::EqualEqual) => BinaryOp::Equal,
+                Some(TokenKind::BangEqual) => BinaryOp::NotEqual,
+                _ => break,
+            };
+            self.iter.next();
+            let rhs = self.parse_relational()?;
+            lhs = Expr::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(lhs)
+    }
+
+    // relational = additive (("<" | "<=" | ">" | ">=") additive)*
+    fn parse_relational(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_additive()?;
+        loop {
+            let op = match self.peek() {
+                Some(TokenKind::Less) => BinaryOp::Less,
+                Some(TokenKind::LessEqual) => BinaryOp::LessEqual,
+                Some(TokenKind::Greater) => BinaryOp::Greater,
+                Some(TokenKind::GreaterEqual) => BinaryOp::GreaterEqual,
+                _ => break,
+            };
+            self.iter.next();
+            let rhs = self.parse_additive()?;
+            lhs = Expr::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(lhs)
     }
 
     // additive = multiplicative (("+" | "-") multiplicative)*

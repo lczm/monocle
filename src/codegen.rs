@@ -62,6 +62,8 @@ fn emit_expr(expression: &Expr, assembly: &mut String) {
                 BinaryOp::Multiply => "mul",
                 BinaryOp::Divide => "div",
                 BinaryOp::Modulo => "rem",
+                // not implemented
+                _ => unreachable!("comparison codegen not implemented yet"),
             };
             // for whichever binary instruction, we can just match to the RV64IM instruction
             // t0 = LHS loaded
