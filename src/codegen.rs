@@ -40,13 +40,20 @@ fn emit_expr(expression: &Expr, assembly: &mut String) {
             }
         }
         Expr::Binary { op, lhs, rhs } => {
+            // emit the LHS of the binary
             emit_expr(lhs, assembly);
-            // Preserve the left operand while evaluating the right operand.
-            // A 16-byte slot keeps sp aligned to the RISC-V ABI.
+            // expands the stack pointer by 16 bytes
+            // we use 16 bytes here even though the LHS is only 8 bytes because
+            // RISC-V ABI requires the stack pointer to always be 16-byte aligned
             emit_line(assembly, "addi sp, sp, -16");
+            // store the LHS value in a0 t0 the stack (8 bytes)
             emit_line(assembly, "sd a0, 0(sp)");
+
+            // emit the RHS of the binary
             emit_expr(rhs, assembly);
+            // load the previously emitted LHS into t0
             emit_line(assembly, "ld t0, 0(sp)");
+            // restore the stack pointer by the space we emitted initially
             emit_line(assembly, "addi sp, sp, 16");
 
             let instruction = match op {
@@ -56,6 +63,10 @@ fn emit_expr(expression: &Expr, assembly: &mut String) {
                 BinaryOp::Divide => "div",
                 BinaryOp::Modulo => "rem",
             };
+            // for whichever binary instruction, we can just match to the RV64IM instruction
+            // t0 = LHS loaded
+            // a0 = RHS emitted
+            // a0 = t0 <op> a0
             emit_line(assembly, &format!("{instruction} a0, t0, a0"));
         }
     }
