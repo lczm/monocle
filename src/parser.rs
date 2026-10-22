@@ -41,6 +41,9 @@ pub(crate) struct Parser<'a> {
     src: &'a str,
 }
 
+// the lower the function in the call tree, the higher precedence it has
+// for example : additive = multiplicative (("+" | "-") multiplicative)*
+// just says that multiplicative has a higher precedence
 impl<'a> Parser<'a> {
     pub(crate) fn new(tokens: Vec<Token>, source: &'a str) -> Self {
         Self {

@@ -16,15 +16,25 @@ pub enum TokenKind {
     LParen,
     #[token(")")]
     RParen,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
     #[token("{")]
     LBrace,
     #[token("}")]
     RBrace,
     #[token(";")]
     Semicolon,
+    #[token(",")]
+    Comma,
 
     #[token("int")]
     Int,
+    #[token("sizeof")]
+    Sizeof,
+    // todo : this has to be removed in the future when
+    // the function names can be parsed
     #[token("main")]
     Main,
 
@@ -32,6 +42,7 @@ pub enum TokenKind {
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
+    // Arithmetic
     #[token("+")]
     Plus,
     #[token("-")]
@@ -48,6 +59,76 @@ pub enum TokenKind {
     Increment,
     #[token("--")]
     Decrement,
+
+    // Comparison
+    #[token("==")]
+    EqualEqual,
+    #[token("!=")]
+    BangEqual,
+    #[token("<=")]
+    LessEqual,
+    #[token(">=")]
+    GreaterEqual,
+    #[token("<")]
+    Less,
+    #[token(">")]
+    Greater,
+
+    // Logical
+    #[token("&&")]
+    AndAnd,
+    #[token("||")]
+    OrOr,
+    #[token("!")]
+    Bang,
+
+    // Bitwise and shifts
+    #[token("&")]
+    Ampersand,
+    #[token("|")]
+    Pipe,
+    #[token("^")]
+    Caret,
+    #[token("~")]
+    Tilde,
+    #[token("<<")]
+    LessLess,
+    #[token(">>")]
+    GreaterGreater,
+
+    // Shortcut assignments
+    #[token("=")]
+    Equal,
+    #[token("+=")]
+    PlusEqual,
+    #[token("-=")]
+    MinusEqual,
+    #[token("*=")]
+    StarEqual,
+    #[token("/=")]
+    SlashEqual,
+    #[token("%=")]
+    PercentEqual,
+    #[token("&=")]
+    AmpersandEqual,
+    #[token("|=")]
+    PipeEqual,
+    #[token("^=")]
+    CaretEqual,
+    #[token("<<=")]
+    LessLessEqual,
+    #[token(">>=")]
+    GreaterGreaterEqual,
+
+    // Ternary and member access
+    #[token("?")]
+    Question,
+    #[token(":")]
+    Colon,
+    #[token(".")]
+    Dot,
+    #[token("->")]
+    Arrow,
 
     // Signs are operators so subtraction also works without whitespace: 1-2.
     // lex them as i128 instead of i64 so that we can detect overflow

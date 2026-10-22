@@ -80,6 +80,97 @@ fn preserve_identifier_boundaries_and_compound_operators() {
 }
 
 #[test]
+fn lex_every_operator() {
+    assert_eq!(
+        token_kinds(
+            lex("a sizeof(int) x->y z[1] == != <= >= < > && || ! & | ^ ~ \
+                 << >> = += -= *= /= %= &= |= ^= <<= >>= ? : . ,")
+            .unwrap()
+        ),
+        vec![
+            TokenKind::Identifier("a".into()),
+            TokenKind::Sizeof,
+            TokenKind::LParen,
+            TokenKind::Int,
+            TokenKind::RParen,
+            TokenKind::Identifier("x".into()),
+            TokenKind::Arrow,
+            TokenKind::Identifier("y".into()),
+            TokenKind::Identifier("z".into()),
+            TokenKind::LBracket,
+            TokenKind::Integer(1),
+            TokenKind::RBracket,
+            TokenKind::EqualEqual,
+            TokenKind::BangEqual,
+            TokenKind::LessEqual,
+            TokenKind::GreaterEqual,
+            TokenKind::Less,
+            TokenKind::Greater,
+            TokenKind::AndAnd,
+            TokenKind::OrOr,
+            TokenKind::Bang,
+            TokenKind::Ampersand,
+            TokenKind::Pipe,
+            TokenKind::Caret,
+            TokenKind::Tilde,
+            TokenKind::LessLess,
+            TokenKind::GreaterGreater,
+            TokenKind::Equal,
+            TokenKind::PlusEqual,
+            TokenKind::MinusEqual,
+            TokenKind::StarEqual,
+            TokenKind::SlashEqual,
+            TokenKind::PercentEqual,
+            TokenKind::AmpersandEqual,
+            TokenKind::PipeEqual,
+            TokenKind::CaretEqual,
+            TokenKind::LessLessEqual,
+            TokenKind::GreaterGreaterEqual,
+            TokenKind::Question,
+            TokenKind::Colon,
+            TokenKind::Dot,
+            TokenKind::Comma,
+        ]
+    );
+}
+
+#[test]
+fn lex_operators_without_whitespace_longest_match() {
+    assert_eq!(
+        token_kinds(lex("x==1x!=2x<=3x>=4x&&y x||y x->y a->b 1--2").unwrap()),
+        vec![
+            TokenKind::Identifier("x".into()),
+            TokenKind::EqualEqual,
+            TokenKind::Integer(1),
+            TokenKind::Identifier("x".into()),
+            TokenKind::BangEqual,
+            TokenKind::Integer(2),
+            TokenKind::Identifier("x".into()),
+            TokenKind::LessEqual,
+            TokenKind::Integer(3),
+            TokenKind::Identifier("x".into()),
+            TokenKind::GreaterEqual,
+            TokenKind::Integer(4),
+            TokenKind::Identifier("x".into()),
+            TokenKind::AndAnd,
+            TokenKind::Identifier("y".into()),
+            TokenKind::Identifier("x".into()),
+            TokenKind::OrOr,
+            TokenKind::Identifier("y".into()),
+            TokenKind::Identifier("x".into()),
+            TokenKind::Arrow,
+            TokenKind::Identifier("y".into()),
+            TokenKind::Identifier("a".into()),
+            TokenKind::Arrow,
+            TokenKind::Identifier("b".into()),
+            TokenKind::Integer(1),
+            TokenKind::Decrement,
+            TokenKind::Integer(2),
+        ]
+    );
+}
+
+#[test]
 fn report_invalid_tokens_with_spans() {
     for (source, span) in [
         ("@", 0..1),
