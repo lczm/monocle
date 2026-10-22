@@ -5,11 +5,11 @@ use thiserror::Error;
 pub enum AppError {
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Lexer(#[from] LexError),
+    Lexer(#[from] Box<LexError>),
 
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Parser(#[from] ParseError),
+    Parser(#[from] Box<ParseError>),
 }
 
 #[derive(Error, Debug, Diagnostic)]
