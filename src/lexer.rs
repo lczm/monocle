@@ -10,7 +10,7 @@ pub struct Token {
 }
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone)]
-#[logos(skip r"[ \t\r\n\f\x0b]+")]
+#[logos(skip(r"[ \t\r\n\f\x0b]+|//[^\n]*", allow_greedy = true))]
 pub enum TokenKind {
     #[token("(")]
     LParen,

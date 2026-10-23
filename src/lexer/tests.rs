@@ -63,6 +63,48 @@ fn lex_wrapper_and_skip_whitespace() {
 }
 
 #[test]
+fn skip_line_comments() {
+    assert_eq!(
+        token_kinds(
+            lex(r#"
+1 // comment with int main() inside
++ 2
+"#)
+            .unwrap()
+        ),
+        vec![
+            TokenKind::Integer(1),
+            TokenKind::Plus,
+            TokenKind::Integer(2),
+        ]
+    );
+}
+
+#[test]
+fn line_comment_at_end_of_input_and_division_still_works() {
+    assert_eq!(
+        token_kinds(lex(r#"1//no trailing newline"#).unwrap()),
+        vec![TokenKind::Integer(1)]
+    );
+    assert_eq!(
+        token_kinds(
+            lex(r#"
+1 / 2 3//x
+4
+"#)
+            .unwrap()
+        ),
+        vec![
+            TokenKind::Integer(1),
+            TokenKind::Slash,
+            TokenKind::Integer(2),
+            TokenKind::Integer(3),
+            TokenKind::Integer(4),
+        ]
+    );
+}
+
+#[test]
 fn preserve_identifier_boundaries_and_compound_operators() {
     assert_eq!(
         token_kinds(lex("intmain main2 1++2 1--2").unwrap()),
