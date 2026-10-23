@@ -145,6 +145,7 @@ fn wrapper_only_groups_expressions() {
     assert_eq!(parse("42;").unwrap(), vec![Expr::Integer(42)]);
 }
 
+#[test]
 fn parse_return_statements() {
     assert_eq!(
         parse_stmts("int main() { return 42; }").unwrap(),

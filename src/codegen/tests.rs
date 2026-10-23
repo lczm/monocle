@@ -185,3 +185,88 @@ main:
 "#;
     assert_eq!(compile("int main() { 7; return 2 * 3; }"), expected);
 }
+
+#[test]
+fn logical_and_emits_short_circuit_jump() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 1
+	beqz a0, .Lfalse0
+	li a0, 2
+	snez a0, a0
+	j .Ldone0
+.Lfalse0:
+	li a0, 0
+.Ldone0:
+	ret
+"#;
+    assert_eq!(compile("1 && 2"), expected);
+}
+
+#[test]
+fn logical_or_emits_short_circuit_jump() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 1
+	bnez a0, .Ltrue0
+	li a0, 0
+	snez a0, a0
+	j .Ldone0
+.Ltrue0:
+	li a0, 1
+.Ldone0:
+	ret
+"#;
+    assert_eq!(compile("1 || 0"), expected);
+}
+
+#[test]
+fn short_circuit_places_the_branch_before_the_rhs() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 0
+	beqz a0, .Lfalse0
+	li a0, 1
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 2
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	snez a0, a0
+	j .Ldone0
+.Lfalse0:
+	li a0, 0
+.Ldone0:
+	ret
+"#;
+    assert_eq!(compile("0 && (1 + 2)"), expected);
+}
+
+#[test]
+fn chained_logical_operators_number_their_labels() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 1
+	beqz a0, .Lfalse0
+	li a0, 0
+	snez a0, a0
+	j .Ldone0
+.Lfalse0:
+	li a0, 0
+.Ldone0:
+	bnez a0, .Ltrue1
+	li a0, 1
+	snez a0, a0
+	j .Ldone1
+.Ltrue1:
+	li a0, 1
+.Ldone1:
+	ret
+"#;
+    assert_eq!(compile("1 && 0 || 1"), expected);
+}

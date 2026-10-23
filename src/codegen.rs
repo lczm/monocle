@@ -9,14 +9,17 @@ pub fn codegen(statements: Vec<Stmt>) -> String {
 
     let empty = statements.is_empty();
     let mut has_return = false;
+    // labels that we need to emit for short-circuit jumps
+    // they need to be unique so we increment per use of And / Or
+    let mut next_label = 0_u32;
     for statement in statements {
         match statement {
-            Stmt::Expr(expr) => emit_expr(&expr, &mut assembly),
+            Stmt::Expr(expr) => emit_expr(&expr, &mut assembly, &mut next_label),
             // for now we only support a single return statement
             // and it must be the last statement in the program
             Stmt::Return(expr) => {
                 has_return = true;
-                emit_expr(&expr, &mut assembly);
+                emit_expr(&expr, &mut assembly, &mut next_label);
                 // the expression's value is in a0; skip any statements after it
                 emit_line(&mut assembly, "j .Lmain_end");
             }
@@ -45,18 +48,61 @@ fn emit_label(assembly: &mut String, label: &str) {
 }
 
 // Every expression leaves its result in a0 and restores sp.
-fn emit_expr(expression: &Expr, assembly: &mut String) {
+fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32) {
     match expression {
         Expr::Integer(value) => emit_line(assembly, &format!("li a0, {value}")),
         Expr::Unary { op, operand } => {
-            emit_expr(operand, assembly);
+            emit_expr(operand, assembly, next_label);
             if *op == UnaryOp::Minus {
                 emit_line(assembly, "neg a0, a0");
             }
         }
         Expr::Binary { op, lhs, rhs } => {
+            // a && b is 0 when a is 0
+            // a || b is 1 when a is nonzero
+            // short-circuit for these operators and not evaluate RHS if LHS is enough
+            if *op == BinaryOp::And || *op == BinaryOp::Or {
+                // emit the LHS of the binary
+                emit_expr(lhs, assembly, next_label);
+                // unique suffix for this pair of labels, so nested
+                // short-circuits do not repeat a label name
+                let l = *next_label;
+                *next_label += 1;
+
+                // if the LHS alone decides the result, skip the RHS entirely
+                if *op == BinaryOp::Or {
+                    // if a0 != 0, then we just bump to the true label and skip RHS
+                    emit_line(assembly, &format!("bnez a0, .Ltrue{l}"));
+                }
+                if *op == BinaryOp::And {
+                    // if a0 == 0, then we just bump to the false label and skip RHS
+                    emit_line(assembly, &format!("beqz a0, .Lfalse{l}"));
+                }
+
+                // the LHS did not decide: evaluate the RHS and
+                // normalize it to 0 or 1
+                emit_expr(rhs, assembly, next_label);
+                emit_line(assembly, "snez a0, a0");
+                // skip over the constant load of the short-circuit path
+                emit_line(assembly, &format!("j .Ldone{l}"));
+
+                // after emitting RHS, we generate the labels for the
+                // short circuit paths so the previous paths can be used to skip over
+                // the RHS emitted code if needed
+                if *op == BinaryOp::Or {
+                    emit_label(assembly, &format!(".Ltrue{l}"));
+                    emit_line(assembly, "li a0, 1");
+                } else {
+                    emit_label(assembly, &format!(".Lfalse{l}"));
+                    emit_line(assembly, "li a0, 0");
+                }
+                // emit the label at the end to skip to the end
+                emit_label(assembly, &format!(".Ldone{l}"));
+                return;
+            }
+
             // emit the LHS of the binary
-            emit_expr(lhs, assembly);
+            emit_expr(lhs, assembly, next_label);
             // expands the stack pointer by 16 bytes
             // we use 16 bytes here even though the LHS is only 8 bytes because
             // RISC-V ABI requires the stack pointer to always be 16-byte aligned
@@ -65,7 +111,7 @@ fn emit_expr(expression: &Expr, assembly: &mut String) {
             emit_line(assembly, "sd a0, 0(sp)");
 
             // emit the RHS of the binary
-            emit_expr(rhs, assembly);
+            emit_expr(rhs, assembly, next_label);
             // load the previously emitted LHS into t0
             emit_line(assembly, "ld t0, 0(sp)");
             // restore the stack pointer by the space we emitted initially
@@ -109,6 +155,8 @@ fn emit_expr(expression: &Expr, assembly: &mut String) {
                     emit_line(assembly, "xor a0, t0, a0");
                     emit_line(assembly, "snez a0, a0");
                 }
+                // handled above so this will never be reached
+                BinaryOp::And | BinaryOp::Or => unreachable!(),
             }
         }
     }
