@@ -21,6 +21,12 @@ pub enum Expr {
     },
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Stmt {
+    Expr(Expr),
+    Return(Expr),
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum UnaryOp {
     Plus,
@@ -58,8 +64,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse_program(&mut self) -> Result<Vec<Expr>, ParseError> {
-        let mut expressions = Vec::new();
+    pub(crate) fn parse_program(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements = Vec::new();
 
         // hard code the int main
         if self.peek() == Some(TokenKind::Int) {
@@ -71,14 +77,14 @@ impl<'a> Parser<'a> {
 
             while self.peek() != Some(TokenKind::RBrace) {
                 if self.peek().is_none() {
-                    return Err(self.expected_error("an expression or '}'"));
+                    return Err(self.expected_error("a statement or '}'"));
                 }
-                expressions.push(self.parse_expr()?);
+                statements.push(self.parse_stmt()?);
                 self.expect(TokenKind::Semicolon, "';'")?;
             }
             self.expect(TokenKind::RBrace, "'}'")?;
         } else {
-            expressions.push(self.parse_expr()?);
+            statements.push(self.parse_stmt()?);
             if self.peek() == Some(TokenKind::Semicolon) {
                 self.iter.next();
             }
@@ -88,7 +94,17 @@ impl<'a> Parser<'a> {
             return Err(self.expected_error("end of input"));
         }
 
-        Ok(expressions)
+        Ok(statements)
+    }
+
+    // stmt = "return" expression | expression
+    fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        if self.peek() == Some(TokenKind::Return) {
+            self.iter.next();
+            let expr = self.parse_expr()?;
+            return Ok(Stmt::Return(expr));
+        }
+        Ok(Stmt::Expr(self.parse_expr()?))
     }
 
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, ParseError> {

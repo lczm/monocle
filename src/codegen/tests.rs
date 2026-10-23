@@ -27,7 +27,7 @@ main:
 	ret
 "#
         );
-        assert_eq!(codegen(vec![Expr::Integer(value)]), expected);
+        assert_eq!(codegen(vec![Stmt::Expr(Expr::Integer(value))]), expected);
     }
 }
 
@@ -150,4 +150,38 @@ main:
 	ret
 "#;
     assert_eq!(compile("int main() { 42; 7; }"), expected);
+}
+
+#[test]
+fn return_jumps_to_the_end_ignoring_other_statements() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 42
+	j .Lmain_end
+	li a0, 7
+.Lmain_end:
+	ret
+"#;
+    assert_eq!(compile("int main() { return 42; 7; }"), expected);
+}
+
+#[test]
+fn return_after_other_statements_returns_the_computed_value() {
+    let expected = r#"	.text
+	.globl main
+main:
+	li a0, 7
+	li a0, 2
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 3
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	mul a0, t0, a0
+	j .Lmain_end
+.Lmain_end:
+	ret
+"#;
+    assert_eq!(compile("int main() { 7; return 2 * 3; }"), expected);
 }

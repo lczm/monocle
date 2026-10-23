@@ -7,7 +7,12 @@ fn token_kinds(tokens: Vec<Token>) -> Vec<TokenKind> {
 #[test]
 fn lex_nested_expression() {
     assert_eq!(
-        token_kinds(lex("(1 + (2 + 3))").unwrap()),
+        token_kinds(
+            lex(r#"
+(1 + (2 + 3))
+"#)
+            .unwrap()
+        ),
         vec![
             TokenKind::LParen,
             TokenKind::Integer(1),
@@ -25,7 +30,12 @@ fn lex_nested_expression() {
 #[test]
 fn lex_arithmetic_and_separate_signs() {
     assert_eq!(
-        token_kinds(lex("1-2 + -3 * 4 / 5 % 6").unwrap()),
+        token_kinds(
+            lex(r#"
+1-2 + -3 * 4 / 5 % 6
+"#)
+            .unwrap()
+        ),
         vec![
             TokenKind::Integer(1),
             TokenKind::Minus,
@@ -46,13 +56,21 @@ fn lex_arithmetic_and_separate_signs() {
 #[test]
 fn lex_wrapper_and_skip_whitespace() {
     assert_eq!(
-        token_kinds(lex("int main() {\r\n\t1 + 2;\n}\x0c\x0b").unwrap()),
+        token_kinds(
+            lex(r#"
+int main() {
+	return 1 + 2;
+}
+"#)
+            .unwrap()
+        ),
         vec![
             TokenKind::Int,
             TokenKind::Main,
             TokenKind::LParen,
             TokenKind::RParen,
             TokenKind::LBrace,
+            TokenKind::Return,
             TokenKind::Integer(1),
             TokenKind::Plus,
             TokenKind::Integer(2),

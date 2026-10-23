@@ -2,6 +2,22 @@ use super::*;
 use crate::lexer::lex;
 
 fn parse(source: &str) -> Result<Vec<Expr>, ParseError> {
+    let statements = parse_stmts(source)?;
+
+    // the expression tests below only deal with expressions, so unwrap
+    // each statement and collect the expression it carries
+    let mut expressions = Vec::new();
+    for statement in statements {
+        match statement {
+            Stmt::Expr(expr) => expressions.push(expr),
+            stmt => panic!("expected an expression statement, got {stmt:?}"),
+        }
+    }
+
+    Ok(expressions)
+}
+
+fn parse_stmts(source: &str) -> Result<Vec<Stmt>, ParseError> {
     let tokens = lex(source).unwrap();
     Parser::new(tokens, source).parse_program()
 }
@@ -95,6 +111,25 @@ fn wrapper_only_groups_expressions() {
     assert_eq!(parse("42;").unwrap(), vec![Expr::Integer(42)]);
 }
 
+fn parse_return_statements() {
+    assert_eq!(
+        parse_stmts("int main() { return 42; }").unwrap(),
+        vec![Stmt::Return(Expr::Integer(42))]
+    );
+    assert_eq!(
+        parse_stmts("return 1 + 2 * 3;").unwrap(),
+        vec![Stmt::Return(binary(
+            BinaryOp::Add,
+            Expr::Integer(1),
+            binary(BinaryOp::Multiply, Expr::Integer(2), Expr::Integer(3)),
+        ))]
+    );
+    assert_eq!(
+        parse_stmts("int main() { 1; return 2; }").unwrap(),
+        vec![Stmt::Expr(Expr::Integer(1)), Stmt::Return(Expr::Integer(2))]
+    );
+}
+
 #[test]
 fn reject_malformed_input_with_expected_token_and_span() {
     for (source, expected, span) in [
@@ -132,8 +167,8 @@ fn report_missing_input_at_eof() {
         ("", "an integer or '('"),
         ("1 +", "an integer or '('"),
         ("(1 + 2", "')'"),
-        ("int main() {", "an expression or '}'"),
-        ("int main() { 1;", "an expression or '}'"),
+        ("int main() {", "a statement or '}'"),
+        ("int main() { 1;", "a statement or '}'"),
     ] {
         let error = parse(source).unwrap_err();
         assert!(
@@ -204,6 +239,10 @@ fn parse_supplied_tokens() {
 
     assert_eq!(
         Parser::new(tokens, source).parse_program().unwrap(),
-        vec![binary(BinaryOp::Add, Expr::Integer(1), Expr::Integer(3))]
+        vec![Stmt::Expr(binary(
+            BinaryOp::Add,
+            Expr::Integer(1),
+            Expr::Integer(3),
+        ))]
     );
 }

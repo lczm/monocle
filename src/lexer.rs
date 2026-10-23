@@ -37,6 +37,8 @@ pub enum TokenKind {
     // the function names can be parsed
     #[token("main")]
     Main,
+    #[token("return")]
+    Return,
 
     // Consume whole identifiers so `intmain` cannot become `int main`.
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]

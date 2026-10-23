@@ -1,19 +1,34 @@
-use crate::{BinaryOp, Expr, UnaryOp};
+use crate::{BinaryOp, Expr, Stmt, UnaryOp};
 
 // takes ast and emits RV64IM asm
-pub fn codegen(expressions: Vec<Expr>) -> String {
+pub fn codegen(statements: Vec<Stmt>) -> String {
     let mut assembly = String::new();
     emit_line(&mut assembly, ".text");
     emit_line(&mut assembly, ".globl main");
     emit_label(&mut assembly, "main");
 
-    if expressions.is_empty() {
-        emit_line(&mut assembly, "li a0, 0");
-    }
-    for expression in &expressions {
-        emit_expr(expression, &mut assembly);
+    let empty = statements.is_empty();
+    let mut has_return = false;
+    for statement in statements {
+        match statement {
+            Stmt::Expr(expr) => emit_expr(&expr, &mut assembly),
+            // for now we only support a single return statement
+            // and it must be the last statement in the program
+            Stmt::Return(expr) => {
+                has_return = true;
+                emit_expr(&expr, &mut assembly);
+                // the expression's value is in a0; skip any statements after it
+                emit_line(&mut assembly, "j .Lmain_end");
+            }
+        }
     }
 
+    if empty {
+        emit_line(&mut assembly, "li a0, 0");
+    }
+    if has_return {
+        emit_label(&mut assembly, ".Lmain_end");
+    }
     emit_line(&mut assembly, "ret");
     assembly
 }
