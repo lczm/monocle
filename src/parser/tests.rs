@@ -77,6 +77,40 @@ fn parse_precedence_and_left_associativity() {
 }
 
 #[test]
+fn parse_logical_and_or_precedence() {
+    // the && operator has higher precedence than ||
+    use BinaryOp::*;
+    use Expr::Integer as int;
+
+    for (source, expected) in [
+        // || is loosest, then &&, then the comparison operators
+        (
+            "1 < 2 && 3 < 4",
+            binary(
+                And,
+                binary(Less, int(1), int(2)),
+                binary(Less, int(3), int(4)),
+            ),
+        ),
+        (
+            "1 || 2 && 3",
+            binary(Or, int(1), binary(And, int(2), int(3))),
+        ),
+        // both are left associative
+        (
+            "0 || 0 || 2",
+            binary(Or, binary(Or, int(0), int(0)), int(2)),
+        ),
+        (
+            "1 && 2 && 3",
+            binary(And, binary(And, int(1), int(2)), int(3)),
+        ),
+    ] {
+        assert_eq!(parse(source).unwrap(), vec![expected], "{source}");
+    }
+}
+
+#[test]
 fn parse_unary_signs() {
     assert_eq!(
         parse("-(1 + 2) * +3").unwrap(),

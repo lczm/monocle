@@ -46,6 +46,8 @@ pub enum BinaryOp {
     LessEqual,
     Greater,
     GreaterEqual,
+    And,
+    Or,
 }
 
 pub(crate) struct Parser<'a> {
@@ -108,7 +110,37 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_equality()
+        self.parse_logical_or()
+    }
+
+    // logical_or = logical_and (("||") logical_and)*
+    fn parse_logical_or(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_logical_and()?;
+        while let Some(TokenKind::OrOr) = self.peek() {
+            self.iter.next();
+            let rhs = self.parse_logical_and()?;
+            lhs = Expr::Binary {
+                op: BinaryOp::Or,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(lhs)
+    }
+
+    // logical_and = equality (("&&") equality)*
+    fn parse_logical_and(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_equality()?;
+        while let Some(TokenKind::AndAnd) = self.peek() {
+            self.iter.next();
+            let rhs = self.parse_equality()?;
+            lhs = Expr::Binary {
+                op: BinaryOp::And,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(lhs)
     }
 
     // equality = relational (("==" | "!=") relational)*
