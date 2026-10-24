@@ -3,9 +3,7 @@ use crate::{BinaryOp, Expr, Stmt, UnaryOp};
 // takes ast and emits RV64IM asm
 pub fn codegen(statements: Vec<Stmt>) -> String {
     let mut assembly = String::new();
-    emit_line(&mut assembly, ".text");
-    emit_line(&mut assembly, ".globl main");
-    emit_label(&mut assembly, "main");
+    emit_headers(&mut assembly);
 
     let empty = statements.is_empty();
     let mut has_return = false;
@@ -34,6 +32,12 @@ pub fn codegen(statements: Vec<Stmt>) -> String {
     }
     emit_line(&mut assembly, "ret");
     assembly
+}
+
+fn emit_headers(assembly: &mut String) {
+    emit_line(assembly, ".text");
+    emit_line(assembly, ".globl main");
+    emit_label(assembly, "main");
 }
 
 fn emit_line(assembly: &mut String, line: &str) {
