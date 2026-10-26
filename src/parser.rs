@@ -31,6 +31,8 @@ pub enum Stmt {
     Decl(String),
     // "x = expr;"
     Assign(String, Expr),
+    // "int x = expr;"
+    DeclAssignment(String, Expr),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -114,11 +116,16 @@ impl<'a> Parser<'a> {
             return Ok(Stmt::Return(expr));
         }
 
-        // declarations like "int x"
+        // declarations like "int x" and "int x = expr"
         if self.peek() == Some(TokenKind::Int) {
             self.iter.next();
             if let Some(TokenKind::Identifier(name)) = self.peek() {
                 self.iter.next();
+                if self.peek() == Some(TokenKind::Equal) {
+                    self.iter.next();
+                    let value = self.parse_expr()?;
+                    return Ok(Stmt::DeclAssignment(name, value));
+                }
                 return Ok(Stmt::Decl(name));
             }
             return Err(self.expected_error("an identifier after 'int'"));

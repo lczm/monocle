@@ -215,6 +215,23 @@ int main() {
 }
 
 #[test]
+fn parse_declarations_with_initializers() {
+    let source = "
+int main() {
+    int x = 1 + 2 * 3;
+}";
+    let expected = vec![Stmt::DeclAssignment(
+        "x".to_string(),
+        binary(
+            BinaryOp::Add,
+            Expr::Integer(1),
+            binary(BinaryOp::Multiply, Expr::Integer(2), Expr::Integer(3)),
+        ),
+    )];
+    assert_eq!(parse_stmts(source).unwrap(), expected);
+}
+
+#[test]
 fn parse_assignments_and_variable_reads() {
     // the rhs of an assignment is a full expression
     let source = "
