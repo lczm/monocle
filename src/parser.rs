@@ -25,6 +25,9 @@ pub enum Expr {
 pub enum Stmt {
     Expr(Expr),
     Return(Expr),
+    // todo: this will be changed to parsing some type in the future
+    // declarations, but hardcoded to int for now
+    Decl(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -99,12 +102,24 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    // stmt = "return" expression | expression
+    // stmt = "return" expression | "int" identifier | expression
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // specifically for return statements
         if self.peek() == Some(TokenKind::Return) {
             self.iter.next();
             let expr = self.parse_expr()?;
             return Ok(Stmt::Return(expr));
+        }
+
+        // declarations like "int x"
+        // the trailing ; is consumed by the caller
+        if self.peek() == Some(TokenKind::Int) {
+            self.iter.next();
+            if let Some(TokenKind::Identifier(name)) = self.peek() {
+                self.iter.next();
+                return Ok(Stmt::Decl(name));
+            }
+            return Err(self.expected_error("an identifier after 'int'"));
         }
         Ok(Stmt::Expr(self.parse_expr()?))
     }

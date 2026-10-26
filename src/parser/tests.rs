@@ -130,9 +130,17 @@ fn parse_unary_signs() {
 
 #[test]
 fn wrapper_only_groups_expressions() {
-    assert_eq!(parse("int main() { }").unwrap(), vec![]);
+    let source = "
+int main() {
+}";
+    assert_eq!(parse(source).unwrap(), vec![]);
+    let source = "
+int main() {
+    (1 + (2 + 3));
+    4 * 5;
+}";
     assert_eq!(
-        parse("int main() { (1 + (2 + 3)); 4 * 5; }").unwrap(),
+        parse(source).unwrap(),
         vec![
             binary(
                 BinaryOp::Add,
@@ -147,8 +155,12 @@ fn wrapper_only_groups_expressions() {
 
 #[test]
 fn parse_return_statements() {
+    let source = "
+int main() {
+    return 42;
+}";
     assert_eq!(
-        parse_stmts("int main() { return 42; }").unwrap(),
+        parse_stmts(source).unwrap(),
         vec![Stmt::Return(Expr::Integer(42))]
     );
     assert_eq!(
@@ -159,10 +171,47 @@ fn parse_return_statements() {
             binary(BinaryOp::Multiply, Expr::Integer(2), Expr::Integer(3)),
         ))]
     );
+    let source = "
+int main() {
+    1;
+    return 2;
+}";
     assert_eq!(
-        parse_stmts("int main() { 1; return 2; }").unwrap(),
+        parse_stmts(source).unwrap(),
         vec![Stmt::Expr(Expr::Integer(1)), Stmt::Return(Expr::Integer(2))]
     );
+}
+
+#[test]
+fn parse_declarations() {
+    let source = "
+int main() {
+    int x;
+}";
+    let expected = vec![Stmt::Decl("x".to_string())];
+    assert_eq!(parse_stmts(source).unwrap(), expected);
+
+    let source = "
+int main() {
+    int x;
+    int y;
+}";
+    let expected = vec![Stmt::Decl("x".to_string()), Stmt::Decl("y".to_string())];
+    assert_eq!(parse_stmts(source).unwrap(), expected);
+
+    // declarations coexist with expression and return statements
+    let source = "
+int main() {
+    int x;
+    1;
+    return 2;
+}";
+    let expected = vec![
+        Stmt::Decl("x".to_string()),
+        Stmt::Expr(Expr::Integer(1)),
+        Stmt::Return(Expr::Integer(2)),
+    ];
+    assert_eq!(parse_stmts(source).unwrap(), expected);
 }
 
 #[test]
@@ -180,6 +229,8 @@ fn reject_malformed_input_with_expected_token_and_span() {
         ("int main(1) {}", "')'", 9..10),
         ("int main() { 1 }", "';'", 15..16),
         ("int main() {} 1", "end of input", 14..15),
+        ("int main() { int; }", "an identifier after 'int'", 16..17),
+        ("int main() { int 5; }", "an identifier after 'int'", 17..18),
     ] {
         let error = parse(source).unwrap_err();
         assert!(
