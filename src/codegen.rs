@@ -1,9 +1,54 @@
 use crate::{BinaryOp, Expr, Stmt, UnaryOp};
 
+struct Frame {
+    slots: Vec<(String, i32)>,
+    size: i32,
+}
+
+fn build_frame(statements: &Vec<Stmt>) -> Frame {
+    let mut slots = Vec::new();
+    let mut next_offset = 0;
+
+    for statement in statements {
+        if let Stmt::Decl(name) = statement {
+            slots.push((name.clone(), next_offset));
+            next_offset += 8;
+        }
+    }
+
+    Frame {
+        slots,
+        size: round_up_to_16(next_offset),
+    }
+}
+
+// RV64 needs to be 16-bytes aligned at all times
+fn round_up_to_16(bytes: i32) -> i32 {
+    (bytes + 15) / 16 * 16
+}
+
+// the stack grows down: reserving bytes moves sp down, releasing moves it up
+fn reserve_stack(assembly: &mut String, bytes: i32) {
+    emit_line(assembly, &format!("addi sp, sp, -{bytes}"));
+}
+
+fn release_stack(assembly: &mut String, bytes: i32) {
+    emit_line(assembly, &format!("addi sp, sp, {bytes}"));
+}
+
 // takes ast and emits RV64IM asm
 pub fn codegen(statements: Vec<Stmt>) -> String {
     let mut assembly = String::new();
     emit_headers(&mut assembly);
+
+    // todo: when we parse individual functions, we have to build a frame for each function
+    // only deal with the main() function for now
+    // but for now, this can just be a single frame for the entire program
+    let frame = build_frame(&statements);
+    let has_frame = frame.size > 0;
+    if has_frame {
+        reserve_stack(&mut assembly, frame.size);
+    }
 
     let empty = statements.is_empty();
     let mut has_return = false;
@@ -30,6 +75,11 @@ pub fn codegen(statements: Vec<Stmt>) -> String {
     }
     if has_return {
         emit_label(&mut assembly, ".Lmain_end");
+    }
+
+    // give the frame back on both the fallthrough and the return-jump path
+    if has_frame {
+        release_stack(&mut assembly, frame.size);
     }
     emit_line(&mut assembly, "ret");
     assembly

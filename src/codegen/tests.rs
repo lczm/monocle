@@ -142,6 +142,12 @@ main:
 
 #[test]
 fn expressions_run_in_order_and_return_the_last_value() {
+    let source = "
+int main() {
+    42;
+    7;
+}";
+
     let expected = r#"	.text
 	.globl main
 main:
@@ -149,11 +155,17 @@ main:
 	li a0, 7
 	ret
 "#;
-    assert_eq!(compile("int main() { 42; 7; }"), expected);
+    assert_eq!(compile(source), expected);
 }
 
 #[test]
 fn return_jumps_to_the_end_ignoring_other_statements() {
+    let source = "
+int main() {
+    return 42;
+    7;
+}";
+
     let expected = r#"	.text
 	.globl main
 main:
@@ -163,11 +175,17 @@ main:
 .Lmain_end:
 	ret
 "#;
-    assert_eq!(compile("int main() { return 42; 7; }"), expected);
+    assert_eq!(compile(source), expected);
 }
 
 #[test]
 fn return_after_other_statements_returns_the_computed_value() {
+    let source = "
+int main() {
+    7;
+    return 2 * 3;
+}";
+
     let expected = r#"	.text
 	.globl main
 main:
@@ -183,7 +201,7 @@ main:
 .Lmain_end:
 	ret
 "#;
-    assert_eq!(compile("int main() { 7; return 2 * 3; }"), expected);
+    assert_eq!(compile(source), expected);
 }
 
 #[test]
@@ -269,4 +287,76 @@ main:
 	ret
 "#;
     assert_eq!(compile("1 && 0 || 1"), expected);
+}
+
+#[test]
+fn declarations_allocate_a_frame() {
+    let source = "
+int main() {
+    int x;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	addi sp, sp, 16
+	ret
+"#;
+    assert_eq!(compile(source), expected);
+}
+
+#[test]
+fn frame_size_rounds_up_to_16() {
+    // two 8-byte slots fit in 16 bytes
+    let source = "
+int main() {
+    int x;
+    int y;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	addi sp, sp, 16
+	ret
+"#;
+    assert_eq!(compile(source), expected);
+
+    // three 8-byte slots are 24 bytes, which rounds up to 32 (a 16-multiple)
+    let source = "
+int main() {
+    int x;
+    int y;
+    int z;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -32
+	addi sp, sp, 32
+	ret
+"#;
+    assert_eq!(compile(source), expected);
+}
+
+#[test]
+fn declarations_coexist_with_statements_and_return() {
+    let source = "
+int main() {
+    int x;
+    1;
+    return 2;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 1
+	li a0, 2
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    assert_eq!(compile(source), expected);
 }
