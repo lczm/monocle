@@ -360,3 +360,65 @@ main:
 "#;
     assert_eq!(compile(source), expected);
 }
+
+#[test]
+fn assignment_stores_into_the_variable_slot() {
+    let source = "
+int main() {
+    int x;
+    x = 2 + 3;
+    return x;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 2
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 3
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	sd a0, 0(sp)
+	ld a0, 0(sp)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    assert_eq!(compile(source), expected);
+}
+
+#[test]
+fn multiple_variables_get_distinct_slots() {
+    let source = "
+int main() {
+    int x;
+    int y;
+    x = 1;
+    y = 2;
+    return x + y;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 1
+	sd a0, 0(sp)
+	li a0, 2
+	sd a0, 8(sp)
+	ld a0, 0(sp)
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	ld a0, 8(sp)
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    assert_eq!(compile(source), expected);
+}
