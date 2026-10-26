@@ -10,6 +10,7 @@ use crate::{
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Integer(i64),
+    Variable(String),
     Unary {
         op: UnaryOp,
         operand: Box<Expr>,
@@ -28,6 +29,8 @@ pub enum Stmt {
     // todo: this will be changed to parsing some type in the future
     // declarations, but hardcoded to int for now
     Decl(String),
+    // "x = expr;"
+    Assign(String, Expr),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -112,7 +115,6 @@ impl<'a> Parser<'a> {
         }
 
         // declarations like "int x"
-        // the trailing ; is consumed by the caller
         if self.peek() == Some(TokenKind::Int) {
             self.iter.next();
             if let Some(TokenKind::Identifier(name)) = self.peek() {
@@ -121,10 +123,22 @@ impl<'a> Parser<'a> {
             }
             return Err(self.expected_error("an identifier after 'int'"));
         }
+
+        // assignments like "x = expr"
+        if let Some(TokenKind::Identifier(name)) = self.peek() {
+            self.iter.next();
+            if self.peek() == Some(TokenKind::Equal) {
+                self.iter.next();
+                let value = self.parse_expr()?;
+                return Ok(Stmt::Assign(name, value));
+            }
+            return Ok(Stmt::Expr(Expr::Variable(name)));
+        }
+
         Ok(Stmt::Expr(self.parse_expr()?))
     }
 
-    pub(crate) fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
         self.parse_logical_or()
     }
 
@@ -255,7 +269,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    // primary = integer | "(" expression ")"
+    // primary = integer | identifier | "(" expression ")"
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         match self.peek() {
             Some(TokenKind::Integer(value)) => {
@@ -270,13 +284,17 @@ impl<'a> Parser<'a> {
                     }),
                 }
             }
+            Some(TokenKind::Identifier(name)) => {
+                self.iter.next();
+                Ok(Expr::Variable(name))
+            }
             Some(TokenKind::LParen) => {
                 self.iter.next();
                 let expression = self.parse_expr()?;
                 self.expect(TokenKind::RParen, "')'")?;
                 Ok(expression)
             }
-            _ => Err(self.expected_error("an integer or '('")),
+            _ => Err(self.expected_error("an integer, identifier or '('")),
         }
     }
 

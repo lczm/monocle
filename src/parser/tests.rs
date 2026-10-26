@@ -215,16 +215,72 @@ int main() {
 }
 
 #[test]
+fn parse_assignments_and_variable_reads() {
+    // the rhs of an assignment is a full expression
+    let source = "
+int main() {
+    int x;
+    x = 1 + 2 * 3;
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![
+            Stmt::Decl("x".to_string()),
+            Stmt::Assign(
+                "x".to_string(),
+                binary(
+                    BinaryOp::Add,
+                    Expr::Integer(1),
+                    binary(BinaryOp::Multiply, Expr::Integer(2), Expr::Integer(3)),
+                )
+            ),
+        ]
+    );
+
+    // variables are ordinary expressions, e.g. in return and binary exprs
+    let source = "
+int main() {
+    int x;
+    x = 5;
+    return x + 1;
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![
+            Stmt::Decl("x".to_string()),
+            Stmt::Assign("x".to_string(), Expr::Integer(5)),
+            Stmt::Return(binary(
+                BinaryOp::Add,
+                Expr::Variable("x".to_string()),
+                Expr::Integer(1),
+            )),
+        ]
+    );
+
+    // a bare identifier is a discarded variable read
+    let source = "
+int main() {
+    x;
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![Stmt::Expr(Expr::Variable("x".to_string()))]
+    );
+}
+
+#[test]
 fn reject_malformed_input_with_expected_token_and_span() {
     for (source, expected, span) in [
-        ("1 + * 2", "an integer or '('", 4..5),
+        ("1 + * 2", "an integer, identifier or '('", 4..5),
         ("(1 + 2;", "')'", 6..7),
-        (")", "an integer or '('", 0..1),
+        (")", "an integer, identifier or '('", 0..1),
         ("1 2", "end of input", 2..3),
         ("1)", "end of input", 1..2),
         ("1++2", "end of input", 1..3),
         ("1--2", "end of input", 1..3),
-        ("intmain() {}", "an integer or '('", 0..7),
+        // intmain is now a valid (undeclared) identifier, so the error moves
+        // to the '(' that no longer continues the statement
+        ("intmain() {}", "end of input", 7..8),
         ("int main2() {}", "'main'", 4..9),
         ("int main(1) {}", "')'", 9..10),
         ("int main() { 1 }", "';'", 15..16),
@@ -250,8 +306,8 @@ fn reject_malformed_input_with_expected_token_and_span() {
 #[test]
 fn report_missing_input_at_eof() {
     for (source, expected) in [
-        ("", "an integer or '('"),
-        ("1 +", "an integer or '('"),
+        ("", "an integer, identifier or '('"),
+        ("1 +", "an integer, identifier or '('"),
         ("(1 + 2", "')'"),
         ("int main() {", "a statement or '}'"),
         ("int main() { 1;", "a statement or '}'"),
