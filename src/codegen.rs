@@ -10,7 +10,7 @@ fn build_frame(statements: &Vec<Stmt>) -> Frame {
     let mut next_offset = 0;
 
     for statement in statements {
-        if let Stmt::Decl(name) = statement {
+        if let Stmt::Decl(name) | Stmt::DeclAssignment(name, _) = statement {
             slots.push((name.clone(), next_offset));
             next_offset += 8;
         }
@@ -72,7 +72,7 @@ pub fn codegen(statements: Vec<Stmt>) -> Result<String, CodegenError> {
             Stmt::Decl(_) => {}
             // name = expr
             // emit the value lands to a0 then we store it into names slot
-            Stmt::Assign(name, value) => {
+            Stmt::Assign(name, value) | Stmt::DeclAssignment(name, value) => {
                 emit_expr(&value, &mut assembly, &mut next_label, &frame)?;
                 let offset = lookup_slot(&frame, &name)?;
                 emit_line(&mut assembly, &format!("sd a0, {offset}(sp)"));

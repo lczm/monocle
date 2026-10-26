@@ -394,6 +394,51 @@ main:
 }
 
 #[test]
+fn declaration_with_initializer_stores_into_the_variable_slot() {
+    let source = "
+int main() {
+    int x = 2 + 3;
+    return x;
+}";
+    let expected = r#"	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 2
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 3
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	sd a0, 0(sp)
+	ld a0, 0(sp)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    assert_eq!(compile(source), expected);
+}
+
+#[test]
+fn declaration_with_initializer_emits_the_same_code_as_separate_assignment() {
+    // "int x = e;" should behave exactly like "int x; x = e;"
+    let with_initializer = "
+int main() {
+    int x = 2 + 3;
+    return x;
+}";
+    let separate_assignment = "
+int main() {
+    int x;
+    x = 2 + 3;
+    return x;
+}";
+    assert_eq!(compile(with_initializer), compile(separate_assignment));
+}
+
+#[test]
 fn multiple_variables_get_distinct_slots() {
     let source = "
 int main() {
