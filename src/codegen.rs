@@ -13,6 +13,7 @@ pub fn codegen(statements: Vec<Stmt>) -> String {
     for statement in statements {
         match statement {
             Stmt::Expr(expr) => emit_expr(&expr, &mut assembly, &mut next_label),
+            Stmt::Decl(_) => {}
             // for now we only support a single return statement
             // and it must be the last statement in the program
             Stmt::Return(expr) => {
@@ -135,7 +136,6 @@ fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32) {
                 // Greater iS LHS(t0) > RHS(a0) which is a0 < t0
                 BinaryOp::Less => emit_line(assembly, "slt a0, t0, a0"),
                 BinaryOp::Greater => emit_line(assembly, "slt a0, a0, t0"),
-                // <= / >= forms invert the set with a logical-not (xori 1).
 
                 // LessEqual is LHS(t0) <= RHS(a0) which is !(LHS(t0) > RHS(a0)) which is !(a0 < t0)
                 // slt a0, a0, t0 sets a0 = a0 < t0, then xori a0, a0, 1 flips to get !(a0 < t0)
