@@ -38,6 +38,16 @@ impl LexError {
 }
 
 #[derive(Error, Debug, Diagnostic, PartialEq)]
+#[error("undefined variable `{name}`")]
+#[diagnostic(
+    code(monocle::undefined_variable),
+    help("Declare the variable before using it")
+)]
+pub struct CodegenError {
+    pub name: String,
+}
+
+#[derive(Error, Debug, Diagnostic, PartialEq)]
 pub enum ParseError {
     #[error("Unexpected token")]
     #[diagnostic(code(monocle::unexpected_token))]

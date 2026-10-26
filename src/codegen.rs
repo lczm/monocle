@@ -1,4 +1,4 @@
-use crate::{BinaryOp, Expr, Stmt, UnaryOp};
+use crate::{BinaryOp, Expr, Stmt, UnaryOp, errors::CodegenError};
 
 struct Frame {
     slots: Vec<(String, i32)>,
@@ -36,18 +36,17 @@ fn release_stack(assembly: &mut String, bytes: i32) {
     emit_line(assembly, &format!("addi sp, sp, {bytes}"));
 }
 
-// todo : return undeclared identifier if cannot find
-fn lookup_slot(frame: &Frame, name: &String) -> i32 {
+fn lookup_slot(frame: &Frame, name: &String) -> Result<i32, CodegenError> {
     for (slot_name, offset) in frame.slots.iter() {
         if *slot_name == *name {
-            return *offset;
+            return Ok(*offset);
         }
     }
-    panic!("undefined variable {name}");
+    Err(CodegenError { name: name.clone() })
 }
 
 // takes ast and emits RV64IM asm
-pub fn codegen(statements: Vec<Stmt>) -> String {
+pub fn codegen(statements: Vec<Stmt>) -> Result<String, CodegenError> {
     let mut assembly = String::new();
     emit_headers(&mut assembly);
 
@@ -67,22 +66,22 @@ pub fn codegen(statements: Vec<Stmt>) -> String {
     let mut next_label = 0_u32;
     for statement in statements {
         match statement {
-            Stmt::Expr(expr) => emit_expr(&expr, &mut assembly, &mut next_label, &frame),
+            Stmt::Expr(expr) => emit_expr(&expr, &mut assembly, &mut next_label, &frame)?,
             // declarations only reserve space at the start when doing the pre-pass
             // it doesnt emit any code
             Stmt::Decl(_) => {}
             // name = expr
             // emit the value lands to a0 then we store it into names slot
             Stmt::Assign(name, value) => {
-                emit_expr(&value, &mut assembly, &mut next_label, &frame);
-                let offset = lookup_slot(&frame, &name);
+                emit_expr(&value, &mut assembly, &mut next_label, &frame)?;
+                let offset = lookup_slot(&frame, &name)?;
                 emit_line(&mut assembly, &format!("sd a0, {offset}(sp)"));
             }
             // for now we only support a single return statement
             // and it must be the last statement in the program
             Stmt::Return(expr) => {
                 has_return = true;
-                emit_expr(&expr, &mut assembly, &mut next_label, &frame);
+                emit_expr(&expr, &mut assembly, &mut next_label, &frame)?;
                 // the expression's value is in a0; skip any statements after it
                 emit_line(&mut assembly, "j .Lmain_end");
             }
@@ -101,7 +100,7 @@ pub fn codegen(statements: Vec<Stmt>) -> String {
         release_stack(&mut assembly, frame.size);
     }
     emit_line(&mut assembly, "ret");
-    assembly
+    Ok(assembly)
 }
 
 fn emit_headers(assembly: &mut String) {
@@ -122,19 +121,29 @@ fn emit_label(assembly: &mut String, label: &str) {
 }
 
 // Every expression leaves its result in a0 and restores sp.
-fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32, frame: &Frame) {
+fn emit_expr(
+    expression: &Expr,
+    assembly: &mut String,
+    next_label: &mut u32,
+    frame: &Frame,
+) -> Result<(), CodegenError> {
     match expression {
-        Expr::Integer(value) => emit_line(assembly, &format!("li a0, {value}")),
+        Expr::Integer(value) => {
+            emit_line(assembly, &format!("li a0, {value}"));
+            Ok(())
+        }
         // load the variable's slot into a0
         Expr::Variable(name) => {
-            let offset = lookup_slot(frame, name);
+            let offset = lookup_slot(frame, name)?;
             emit_line(assembly, &format!("ld a0, {offset}(sp)"));
+            Ok(())
         }
         Expr::Unary { op, operand } => {
-            emit_expr(operand, assembly, next_label, frame);
+            emit_expr(operand, assembly, next_label, frame)?;
             if *op == UnaryOp::Minus {
                 emit_line(assembly, "neg a0, a0");
             }
+            Ok(())
         }
         Expr::Binary { op, lhs, rhs } => {
             // a && b is 0 when a is 0
@@ -142,7 +151,7 @@ fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32, fra
             // short-circuit for these operators and not evaluate RHS if LHS is enough
             if *op == BinaryOp::And || *op == BinaryOp::Or {
                 // emit the LHS of the binary
-                emit_expr(lhs, assembly, next_label, frame);
+                emit_expr(lhs, assembly, next_label, frame)?;
                 // unique suffix for this pair of labels, so nested
                 // short-circuits do not repeat a label name
                 let l = *next_label;
@@ -160,7 +169,7 @@ fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32, fra
 
                 // the LHS did not decide: evaluate the RHS and
                 // normalize it to 0 or 1
-                emit_expr(rhs, assembly, next_label, frame);
+                emit_expr(rhs, assembly, next_label, frame)?;
                 emit_line(assembly, "snez a0, a0");
                 // skip over the constant load of the short-circuit path
                 emit_line(assembly, &format!("j .Ldone{l}"));
@@ -177,11 +186,11 @@ fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32, fra
                 }
                 // emit the label at the end to skip to the end
                 emit_label(assembly, &format!(".Ldone{l}"));
-                return;
+                return Ok(());
             }
 
             // emit the LHS of the binary
-            emit_expr(lhs, assembly, next_label, frame);
+            emit_expr(lhs, assembly, next_label, frame)?;
             // expands the stack pointer by 16 bytes
             // we use 16 bytes here even though the LHS is only 8 bytes because
             // RISC-V ABI requires the stack pointer to always be 16-byte aligned
@@ -190,7 +199,7 @@ fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32, fra
             emit_line(assembly, "sd a0, 0(sp)");
 
             // emit the RHS of the binary
-            emit_expr(rhs, assembly, next_label, frame);
+            emit_expr(rhs, assembly, next_label, frame)?;
             // load the previously emitted LHS into t0
             emit_line(assembly, "ld t0, 0(sp)");
             // restore the stack pointer by the space we emitted initially
@@ -236,6 +245,7 @@ fn emit_expr(expression: &Expr, assembly: &mut String, next_label: &mut u32, fra
                 // handled above so this will never be reached
                 BinaryOp::And | BinaryOp::Or => unreachable!(),
             }
+            Ok(())
         }
     }
 }

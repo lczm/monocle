@@ -2,7 +2,7 @@ use super::*;
 
 fn compile(source: &str) -> String {
     let tokens = crate::lex(source).unwrap();
-    codegen(crate::parse(tokens, source).unwrap())
+    codegen(crate::parse(tokens, source).unwrap()).unwrap()
 }
 
 #[test]
@@ -13,7 +13,7 @@ main:
 	li a0, 0
 	ret
 "#;
-    assert_eq!(codegen(vec![]), expected);
+    assert_eq!(codegen(vec![]).unwrap(), expected);
 }
 
 #[test]
@@ -27,7 +27,10 @@ main:
 	ret
 "#
         );
-        assert_eq!(codegen(vec![Stmt::Expr(Expr::Integer(value))]), expected);
+        assert_eq!(
+            codegen(vec![Stmt::Expr(Expr::Integer(value))]).unwrap(),
+            expected
+        );
     }
 }
 
@@ -421,4 +424,24 @@ main:
 	ret
 "#;
     assert_eq!(compile(source), expected);
+}
+
+#[test]
+fn using_an_undeclared_variable_is_an_error() {
+    // `z` is used inside an expression but never declared
+    let source = "
+int main() {
+    int x;
+    int y;
+    x = 1;
+    y = 2;
+    return x + z;
+}";
+    let tokens = crate::lex(source).unwrap();
+    let statements = crate::parse(tokens, source).unwrap();
+
+    let expected_error = crate::errors::CodegenError {
+        name: "z".to_string(),
+    };
+    assert_eq!(codegen(statements).unwrap_err(), expected_error);
 }

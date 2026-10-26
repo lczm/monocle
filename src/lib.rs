@@ -4,7 +4,7 @@ mod lexer;
 mod parser;
 
 pub use codegen::codegen;
-pub use errors::{AppError, LexError, ParseError};
+pub use errors::{AppError, CodegenError, LexError, ParseError};
 pub use lexer::{Token, TokenKind};
 pub use parser::{BinaryOp, Expr, Stmt, UnaryOp};
 

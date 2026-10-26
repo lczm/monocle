@@ -40,7 +40,7 @@ fn main() -> miette::Result<()> {
 
     let tokens = monocle::lex(&source)?;
     let statements = monocle::parse(tokens, &source)?;
-    print!("{}", monocle::codegen(statements));
+    print!("{}", monocle::codegen(statements)?);
 
     Ok(())
 }
@@ -84,7 +84,7 @@ fn run_program(file: &Path) -> miette::Result<()> {
     let source = read_source(Some(file))?;
     let tokens = monocle::lex(&source)?;
     let statements = monocle::parse(tokens, &source)?;
-    let assembly = monocle::codegen(statements);
+    let assembly = monocle::codegen(statements)?;
 
     // write it out to a file and link it separately
     fs::write(OUT_ASM, &assembly)
