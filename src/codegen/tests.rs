@@ -427,8 +427,13 @@ main:
 }
 
 #[test]
-fn using_an_undeclared_variable_is_an_error() {
-    // `z` is used inside an expression but never declared
+fn reading_or_writing_an_undeclared_variable_is_an_error() {
+    // same error for both reading and writing
+    let expected_error = crate::errors::CodegenError {
+        name: "z".to_string(),
+    };
+
+    // reading `z` inside an expression
     let source = "
 int main() {
     int x;
@@ -439,9 +444,18 @@ int main() {
 }";
     let tokens = crate::lex(source).unwrap();
     let statements = crate::parse(tokens, source).unwrap();
+    assert_eq!(codegen(statements).unwrap_err(), expected_error);
 
-    let expected_error = crate::errors::CodegenError {
-        name: "z".to_string(),
-    };
+    // writing to `z` with an assignment
+    let source = "
+int main() {
+    int x;
+    int y;
+    x = 1;
+    y = 2;
+    z = 2;
+}";
+    let tokens = crate::lex(source).unwrap();
+    let statements = crate::parse(tokens, source).unwrap();
     assert_eq!(codegen(statements).unwrap_err(), expected_error);
 }
