@@ -38,7 +38,7 @@ pub enum Expr {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Stmt {
+pub enum Statement {
     Expr(Expr),
     Return(Expr),
     // todo: this will be changed to parsing some type in the future
@@ -51,8 +51,8 @@ pub enum Stmt {
     // "if (expr) stmt" or "if (expr) stmt else stmt"
     If {
         condition: Expr,
-        then: Box<Stmt>,
-        else_stmt: Option<Box<Stmt>>,
+        then: Box<Statement>,
+        else_stmt: Option<Box<Statement>>,
     },
 }
 
@@ -95,7 +95,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse_program(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    pub(crate) fn parse_program(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
 
         // hard code the int main
@@ -127,7 +127,7 @@ impl<'a> Parser<'a> {
     // stmts are
     //     | "x = expr;" | "int x = expr;" | "int x;" | "return expr;" | "expr;"
     //     | "if (expr) stmt" or "if (expr) stmt else stmt"
-    fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_stmt(&mut self) -> Result<Statement, ParseError> {
         if self.peek() == Some(TokenKind::If) {
             self.iter.next();
             // condition
@@ -146,7 +146,7 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-            return Ok(Stmt::If {
+            return Ok(Statement::If {
                 condition,
                 then,
                 else_stmt,
@@ -158,7 +158,7 @@ impl<'a> Parser<'a> {
             self.iter.next();
             let expr = self.parse_expr()?;
             self.expect(TokenKind::Semicolon, "';'")?;
-            return Ok(Stmt::Return(expr));
+            return Ok(Statement::Return(expr));
         }
 
         // declarations like "int x;" and "int x = expr;"
@@ -172,10 +172,10 @@ impl<'a> Parser<'a> {
                     self.iter.next();
                     let value = self.parse_expr()?;
                     self.expect(TokenKind::Semicolon, "';'")?;
-                    return Ok(Stmt::DeclAssignment(ident, value));
+                    return Ok(Statement::DeclAssignment(ident, value));
                 }
                 self.expect(TokenKind::Semicolon, "';'")?;
-                return Ok(Stmt::Decl(ident));
+                return Ok(Statement::Decl(ident));
             }
             return Err(self.expected_error("an identifier after 'int'"));
         }
@@ -189,17 +189,17 @@ impl<'a> Parser<'a> {
                 self.iter.next();
                 let value = self.parse_expr()?;
                 self.expect(TokenKind::Semicolon, "';'")?;
-                return Ok(Stmt::Assign(ident, value));
+                return Ok(Statement::Assign(ident, value));
             }
             self.expect(TokenKind::Semicolon, "';'")?;
-            return Ok(Stmt::Expr(Expr::Variable(ident)));
+            return Ok(Statement::Expr(Expr::Variable(ident)));
         }
 
         let expr = self.parse_expr()?;
 
         // statements should consume their own ;
         self.expect(TokenKind::Semicolon, "';'")?;
-        Ok(Stmt::Expr(expr))
+        Ok(Statement::Expr(expr))
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {

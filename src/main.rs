@@ -56,7 +56,7 @@ fn read_source(path: Option<&Path>) -> miette::Result<String> {
             .wrap_err_with(|| format!("failed to read {}", path.display()));
     }
 
-    Ok("(1 + (2 + 3))".to_string())
+    Ok("(1 + (2 + 3));".to_string())
 }
 
 fn run_lex(source: &str) -> miette::Result<()> {

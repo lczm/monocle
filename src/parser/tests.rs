@@ -9,7 +9,7 @@ fn parse(source: &str) -> Result<Vec<Expr>, ParseError> {
     let mut expressions = Vec::new();
     for statement in statements {
         match statement {
-            Stmt::Expr(expr) => expressions.push(expr),
+            Statement::Expr(expr) => expressions.push(expr),
             stmt => panic!("expected an expression statement, got {stmt:?}"),
         }
     }
@@ -17,7 +17,7 @@ fn parse(source: &str) -> Result<Vec<Expr>, ParseError> {
     Ok(expressions)
 }
 
-fn parse_stmts(source: &str) -> Result<Vec<Stmt>, ParseError> {
+fn parse_stmts(source: &str) -> Result<Vec<Statement>, ParseError> {
     let tokens = lex(source).unwrap();
     Parser::new(tokens, source).parse_program()
 }
@@ -174,11 +174,11 @@ int main() {
 }";
     assert_eq!(
         parse_stmts(source).unwrap(),
-        vec![Stmt::Return(Expr::Integer(42))]
+        vec![Statement::Return(Expr::Integer(42))]
     );
     assert_eq!(
         parse_stmts("return 1 + 2 * 3;").unwrap(),
-        vec![Stmt::Return(binary(
+        vec![Statement::Return(binary(
             BinaryOp::Add,
             Expr::Integer(1),
             binary(BinaryOp::Multiply, Expr::Integer(2), Expr::Integer(3)),
@@ -191,7 +191,10 @@ int main() {
 }";
     assert_eq!(
         parse_stmts(source).unwrap(),
-        vec![Stmt::Expr(Expr::Integer(1)), Stmt::Return(Expr::Integer(2))]
+        vec![
+            Statement::Expr(Expr::Integer(1)),
+            Statement::Return(Expr::Integer(2))
+        ]
     );
 }
 
@@ -201,7 +204,7 @@ fn parse_declarations() {
 int main() {
     int x;
 }";
-    let expected = vec![Stmt::Decl(identifier("x"))];
+    let expected = vec![Statement::Decl(identifier("x"))];
     assert_eq!(parse_stmts(source).unwrap(), expected);
 
     let source = "
@@ -209,7 +212,10 @@ int main() {
     int x;
     int y;
 }";
-    let expected = vec![Stmt::Decl(identifier("x")), Stmt::Decl(identifier("y"))];
+    let expected = vec![
+        Statement::Decl(identifier("x")),
+        Statement::Decl(identifier("y")),
+    ];
     assert_eq!(parse_stmts(source).unwrap(), expected);
 
     // declarations coexist with expression and return statements
@@ -220,9 +226,9 @@ int main() {
     return 2;
 }";
     let expected = vec![
-        Stmt::Decl(identifier("x")),
-        Stmt::Expr(Expr::Integer(1)),
-        Stmt::Return(Expr::Integer(2)),
+        Statement::Decl(identifier("x")),
+        Statement::Expr(Expr::Integer(1)),
+        Statement::Return(Expr::Integer(2)),
     ];
     assert_eq!(parse_stmts(source).unwrap(), expected);
 }
@@ -233,7 +239,7 @@ fn parse_declarations_with_initializers() {
 int main() {
     int x = 1 + 2 * 3;
 }";
-    let expected = vec![Stmt::DeclAssignment(
+    let expected = vec![Statement::DeclAssignment(
         identifier("x"),
         binary(
             BinaryOp::Add,
@@ -255,8 +261,8 @@ int main() {
     assert_eq!(
         parse_stmts(source).unwrap(),
         vec![
-            Stmt::Decl(identifier("x")),
-            Stmt::Assign(
+            Statement::Decl(identifier("x")),
+            Statement::Assign(
                 identifier("x"),
                 binary(
                     BinaryOp::Add,
@@ -277,9 +283,9 @@ int main() {
     assert_eq!(
         parse_stmts(source).unwrap(),
         vec![
-            Stmt::Decl(identifier("x")),
-            Stmt::Assign(identifier("x"), Expr::Integer(5)),
-            Stmt::Return(binary(
+            Statement::Decl(identifier("x")),
+            Statement::Assign(identifier("x"), Expr::Integer(5)),
+            Statement::Return(binary(
                 BinaryOp::Add,
                 Expr::Variable(identifier("x")),
                 Expr::Integer(1),
@@ -294,7 +300,7 @@ int main() {
 }";
     assert_eq!(
         parse_stmts(source).unwrap(),
-        vec![Stmt::Expr(Expr::Variable(identifier("x")))]
+        vec![Statement::Expr(Expr::Variable(identifier("x")))]
     );
 }
 
@@ -309,9 +315,9 @@ int main() {
     let statements = parse_stmts(source).unwrap();
     match statements.as_slice() {
         [
-            Stmt::Decl(x),
-            Stmt::Assign(y, _),
-            Stmt::Return(Expr::Binary { lhs, .. }),
+            Statement::Decl(x),
+            Statement::Assign(y, _),
+            Statement::Return(Expr::Binary { lhs, .. }),
         ] => {
             assert_ident(x, "x", 22..23);
             assert_ident(y, "x", 29..30);
@@ -439,7 +445,7 @@ fn parse_supplied_tokens() {
 
     assert_eq!(
         Parser::new(tokens, source).parse_program().unwrap(),
-        vec![Stmt::Expr(binary(
+        vec![Statement::Expr(binary(
             BinaryOp::Add,
             Expr::Integer(1),
             Expr::Integer(3),
@@ -457,15 +463,18 @@ int main() {
     assert_eq!(
         parse_stmts(source).unwrap(),
         vec![
-            Stmt::If {
+            Statement::If {
                 condition: Expr::Integer(1),
-                then: Box::new(Stmt::Assign(identifier("x"), Expr::Integer(2))),
+                then: Box::new(Statement::Assign(identifier("x"), Expr::Integer(2))),
                 else_stmt: None,
             },
-            Stmt::If {
+            Statement::If {
                 condition: Expr::Variable(identifier("x")),
-                then: Box::new(Stmt::Assign(identifier("y"), Expr::Integer(1))),
-                else_stmt: Some(Box::new(Stmt::Assign(identifier("y"), Expr::Integer(2)))),
+                then: Box::new(Statement::Assign(identifier("y"), Expr::Integer(1))),
+                else_stmt: Some(Box::new(Statement::Assign(
+                    identifier("y"),
+                    Expr::Integer(2)
+                ))),
             },
         ]
     );
@@ -480,12 +489,15 @@ int main() {
 }";
     assert_eq!(
         parse_stmts(source).unwrap(),
-        vec![Stmt::If {
+        vec![Statement::If {
             condition: Expr::Variable(identifier("a")),
-            then: Box::new(Stmt::If {
+            then: Box::new(Statement::If {
                 condition: Expr::Variable(identifier("b")),
-                then: Box::new(Stmt::Assign(identifier("x"), Expr::Integer(1))),
-                else_stmt: Some(Box::new(Stmt::Assign(identifier("x"), Expr::Integer(2)))),
+                then: Box::new(Statement::Assign(identifier("x"), Expr::Integer(1))),
+                else_stmt: Some(Box::new(Statement::Assign(
+                    identifier("x"),
+                    Expr::Integer(2)
+                ))),
             }),
             else_stmt: None,
         }]

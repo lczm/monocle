@@ -88,3 +88,48 @@ int main() {
         "{error:?}"
     );
 }
+
+#[test]
+fn undeclared_variable_in_an_if_condition_is_flagged() {
+    let source = "
+int main() {
+    if (z) x = 1;
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 22 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn undeclared_variable_in_an_if_body_is_flagged() {
+    let source = "
+int main() {
+    int x;
+    if (x) z = 1; else x = 2;
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 36 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn if_bodies_can_use_declared_variables() {
+    let source = "
+int main() {
+    int x;
+    if (x) x = 1; else x = 2;
+}";
+    assert_eq!(analyze(source), Ok(()));
+}
