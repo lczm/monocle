@@ -1,16 +1,31 @@
 use std::{iter::Peekable, vec::IntoIter};
 
-use miette::NamedSource;
+use miette::{NamedSource, SourceSpan};
 
 use crate::{
     errors::ParseError,
     lexer::{Token, TokenKind},
 };
 
+#[derive(Debug)]
+pub struct Identifier {
+    pub name: String,
+    pub span: SourceSpan,
+}
+
+// span is provenance (for error reporting), not identity: two identifiers
+// are equal if their names are, so tests can compare ASTs without
+// hardcoding byte offsets.
+impl PartialEq for Identifier {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Integer(i64),
-    Variable(String),
+    Variable(Identifier),
     Unary {
         op: UnaryOp,
         operand: Box<Expr>,
@@ -28,11 +43,11 @@ pub enum Stmt {
     Return(Expr),
     // todo: this will be changed to parsing some type in the future
     // declarations, but hardcoded to int for now
-    Decl(String),
+    Decl(Identifier),
     // "x = expr;"
-    Assign(String, Expr),
+    Assign(Identifier, Expr),
     // "int x = expr;"
-    DeclAssignment(String, Expr),
+    DeclAssignment(Identifier, Expr),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -120,26 +135,30 @@ impl<'a> Parser<'a> {
         if self.peek() == Some(TokenKind::Int) {
             self.iter.next();
             if let Some(TokenKind::Identifier(name)) = self.peek() {
+                let span = self.iter.peek().unwrap().span;
                 self.iter.next();
+                let ident = Identifier { name, span };
                 if self.peek() == Some(TokenKind::Equal) {
                     self.iter.next();
                     let value = self.parse_expr()?;
-                    return Ok(Stmt::DeclAssignment(name, value));
+                    return Ok(Stmt::DeclAssignment(ident, value));
                 }
-                return Ok(Stmt::Decl(name));
+                return Ok(Stmt::Decl(ident));
             }
             return Err(self.expected_error("an identifier after 'int'"));
         }
 
         // assignments like "x = expr"
         if let Some(TokenKind::Identifier(name)) = self.peek() {
+            let span = self.iter.peek().unwrap().span;
             self.iter.next();
+            let ident = Identifier { name, span };
             if self.peek() == Some(TokenKind::Equal) {
                 self.iter.next();
                 let value = self.parse_expr()?;
-                return Ok(Stmt::Assign(name, value));
+                return Ok(Stmt::Assign(ident, value));
             }
-            return Ok(Stmt::Expr(Expr::Variable(name)));
+            return Ok(Stmt::Expr(Expr::Variable(ident)));
         }
 
         Ok(Stmt::Expr(self.parse_expr()?))
@@ -292,8 +311,9 @@ impl<'a> Parser<'a> {
                 }
             }
             Some(TokenKind::Identifier(name)) => {
+                let span = self.iter.peek().unwrap().span;
                 self.iter.next();
-                Ok(Expr::Variable(name))
+                Ok(Expr::Variable(Identifier { name, span }))
             }
             Some(TokenKind::LParen) => {
                 self.iter.next();

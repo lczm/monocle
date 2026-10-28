@@ -7,7 +7,7 @@ mod parser;
 pub use codegen::codegen;
 pub use errors::{AnalysisError, AppError, CodegenError, LexError, ParseError};
 pub use lexer::{Token, TokenKind};
-pub use parser::{BinaryOp, Expr, Ident, Stmt, UnaryOp};
+pub use parser::{BinaryOp, Expr, Identifier, Stmt, UnaryOp};
 
 pub fn lex(source: &str) -> Result<Vec<Token>, AppError> {
     lexer::lex(source).map_err(|e| AppError::from(Box::new(e)))

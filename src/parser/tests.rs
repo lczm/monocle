@@ -30,6 +30,19 @@ fn binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
     }
 }
 
+// mocking the span since it doesn't really matter here
+fn identifier(name: &str) -> Identifier {
+    Identifier {
+        name: name.to_string(),
+        span: (0..0).into(),
+    }
+}
+
+fn assert_ident(identifier: &Identifier, name: &str, span: std::ops::Range<usize>) {
+    assert_eq!(identifier.name, name);
+    assert_eq!(identifier.span, span.into());
+}
+
 #[test]
 fn parse_simple_and_nested_expressions() {
     use Expr::Integer as int;
@@ -188,7 +201,7 @@ fn parse_declarations() {
 int main() {
     int x;
 }";
-    let expected = vec![Stmt::Decl("x".to_string())];
+    let expected = vec![Stmt::Decl(identifier("x"))];
     assert_eq!(parse_stmts(source).unwrap(), expected);
 
     let source = "
@@ -196,7 +209,7 @@ int main() {
     int x;
     int y;
 }";
-    let expected = vec![Stmt::Decl("x".to_string()), Stmt::Decl("y".to_string())];
+    let expected = vec![Stmt::Decl(identifier("x")), Stmt::Decl(identifier("y"))];
     assert_eq!(parse_stmts(source).unwrap(), expected);
 
     // declarations coexist with expression and return statements
@@ -207,7 +220,7 @@ int main() {
     return 2;
 }";
     let expected = vec![
-        Stmt::Decl("x".to_string()),
+        Stmt::Decl(identifier("x")),
         Stmt::Expr(Expr::Integer(1)),
         Stmt::Return(Expr::Integer(2)),
     ];
@@ -221,7 +234,7 @@ int main() {
     int x = 1 + 2 * 3;
 }";
     let expected = vec![Stmt::DeclAssignment(
-        "x".to_string(),
+        identifier("x"),
         binary(
             BinaryOp::Add,
             Expr::Integer(1),
@@ -242,9 +255,9 @@ int main() {
     assert_eq!(
         parse_stmts(source).unwrap(),
         vec![
-            Stmt::Decl("x".to_string()),
+            Stmt::Decl(identifier("x")),
             Stmt::Assign(
-                "x".to_string(),
+                identifier("x"),
                 binary(
                     BinaryOp::Add,
                     Expr::Integer(1),
@@ -264,11 +277,11 @@ int main() {
     assert_eq!(
         parse_stmts(source).unwrap(),
         vec![
-            Stmt::Decl("x".to_string()),
-            Stmt::Assign("x".to_string(), Expr::Integer(5)),
+            Stmt::Decl(identifier("x")),
+            Stmt::Assign(identifier("x"), Expr::Integer(5)),
             Stmt::Return(binary(
                 BinaryOp::Add,
-                Expr::Variable("x".to_string()),
+                Expr::Variable(identifier("x")),
                 Expr::Integer(1),
             )),
         ]
@@ -281,8 +294,34 @@ int main() {
 }";
     assert_eq!(
         parse_stmts(source).unwrap(),
-        vec![Stmt::Expr(Expr::Variable("x".to_string()))]
+        vec![Stmt::Expr(Expr::Variable(identifier("x")))]
     );
+}
+
+#[test]
+fn identifiers_preserve_their_source_span() {
+    let source = "
+int main() {
+    int x;
+    x = 5;
+    return x + 1;
+}";
+    let statements = parse_stmts(source).unwrap();
+    match statements.as_slice() {
+        [
+            Stmt::Decl(x),
+            Stmt::Assign(y, _),
+            Stmt::Return(Expr::Binary { lhs, .. }),
+        ] => {
+            assert_ident(x, "x", 22..23);
+            assert_ident(y, "x", 29..30);
+            match lhs.as_ref() {
+                Expr::Variable(z) => assert_ident(z, "x", 47..48),
+                other => panic!("expected a variable read, got {other:?}"),
+            }
+        }
+        other => panic!("unexpected statements: {other:?}"),
+    }
 }
 
 #[test]

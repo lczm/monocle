@@ -4,7 +4,7 @@ use miette::NamedSource;
 
 use crate::{
     errors::AnalysisError,
-    parser::{Expr, Ident, Stmt},
+    parser::{Expr, Identifier, Stmt},
 };
 
 // name resolution check over AST
@@ -28,8 +28,8 @@ pub(crate) fn analyze(statements: &[Stmt], source: &str) -> Result<(), AnalysisE
         match statement {
             Stmt::Expr(expr) | Stmt::Return(expr) => check_expr(expr, &declared, source)?,
             Stmt::Decl(_) => {}
-            Stmt::Assign(ident, value) | Stmt::DeclAssignment(ident, value) => {
-                check_identifier(ident, &declared, source)?;
+            Stmt::Assign(identifier, value) | Stmt::DeclAssignment(identifier, value) => {
+                check_identifier(identifier, &declared, source)?;
                 check_expr(value, &declared, source)?;
             }
         }
@@ -38,17 +38,17 @@ pub(crate) fn analyze(statements: &[Stmt], source: &str) -> Result<(), AnalysisE
 }
 
 fn check_identifier(
-    ident: &Ident,
+    identifier: &Identifier,
     declared: &HashSet<&str>,
     source: &str,
 ) -> Result<(), AnalysisError> {
-    if declared.contains(ident.name.as_str()) {
+    if declared.contains(identifier.name.as_str()) {
         return Ok(());
     }
     Err(AnalysisError::UndefinedVariable {
         src: NamedSource::new("input", source.to_string()),
-        span: ident.span,
-        name: ident.name.clone(),
+        span: identifier.span,
+        name: identifier.name.clone(),
     })
 }
 

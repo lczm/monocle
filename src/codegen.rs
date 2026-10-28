@@ -10,8 +10,8 @@ fn build_frame(statements: &Vec<Stmt>) -> Frame {
     let mut next_offset = 0;
 
     for statement in statements {
-        if let Stmt::Decl(name) | Stmt::DeclAssignment(name, _) = statement {
-            slots.push((name.clone(), next_offset));
+        if let Stmt::Decl(identifier) | Stmt::DeclAssignment(identifier, _) = statement {
+            slots.push((identifier.name.clone(), next_offset));
             next_offset += 8;
         }
     }
@@ -72,9 +72,9 @@ pub fn codegen(statements: Vec<Stmt>) -> Result<String, CodegenError> {
             Stmt::Decl(_) => {}
             // name = expr
             // emit the value lands to a0 then we store it into names slot
-            Stmt::Assign(name, value) | Stmt::DeclAssignment(name, value) => {
+            Stmt::Assign(ident, value) | Stmt::DeclAssignment(ident, value) => {
                 emit_expr(&value, &mut assembly, &mut next_label, &frame)?;
-                let offset = lookup_slot(&frame, &name)?;
+                let offset = lookup_slot(&frame, &ident.name)?;
                 emit_line(&mut assembly, &format!("sd a0, {offset}(sp)"));
             }
             // for now we only support a single return statement
@@ -133,8 +133,8 @@ fn emit_expr(
             Ok(())
         }
         // load the variable's slot into a0
-        Expr::Variable(name) => {
-            let offset = lookup_slot(frame, name)?;
+        Expr::Variable(identifier) => {
+            let offset = lookup_slot(frame, &identifier.name)?;
             emit_line(assembly, &format!("ld a0, {offset}(sp)"));
             Ok(())
         }

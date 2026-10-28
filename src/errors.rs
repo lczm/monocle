@@ -38,6 +38,37 @@ impl LexError {
 }
 
 #[derive(Error, Debug, Diagnostic, PartialEq)]
+pub enum AnalysisError {
+    #[error("undefined variable `{name}`")]
+    #[diagnostic(
+        code(monocle::undefined_variable),
+        help("Declare the variable before using it")
+    )]
+    UndefinedVariable {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("This variable has not been declared")]
+        span: SourceSpan,
+        name: String,
+    },
+
+    #[error("duplicate declaration of `{name}`")]
+    #[diagnostic(
+        code(monocle::duplicate_declaration),
+        help("Declare each variable only once per scope")
+    )]
+    DuplicateDeclaration {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("Already declared here")]
+        span: SourceSpan,
+        name: String,
+    },
+}
+
+// codegen's name lookup is a defensive backstop; the real, span-carrying
+// check lives in the analysis pass (crate::analyze)
+#[derive(Error, Debug, Diagnostic, PartialEq)]
 #[error("undefined variable `{name}`")]
 #[diagnostic(
     code(monocle::undefined_variable),
