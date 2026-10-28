@@ -48,6 +48,12 @@ pub enum Stmt {
     Assign(Identifier, Expr),
     // "int x = expr;"
     DeclAssignment(Identifier, Expr),
+    // "if (expr) stmt" or "if (expr) stmt else stmt"
+    If {
+        condition: Expr,
+        then: Box<Stmt>,
+        else_stmt: Option<Box<Stmt>>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -105,14 +111,10 @@ impl<'a> Parser<'a> {
                     return Err(self.expected_error("a statement or '}'"));
                 }
                 statements.push(self.parse_stmt()?);
-                self.expect(TokenKind::Semicolon, "';'")?;
             }
             self.expect(TokenKind::RBrace, "'}'")?;
         } else {
             statements.push(self.parse_stmt()?);
-            if self.peek() == Some(TokenKind::Semicolon) {
-                self.iter.next();
-            }
         }
 
         if self.peek().is_some() {
@@ -122,16 +124,44 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    // stmt = "return" expression | "int" identifier | expression
+    // stmts are
+    //     | "x = expr;" | "int x = expr;" | "int x;" | "return expr;" | "expr;"
+    //     | "if (expr) stmt" or "if (expr) stmt else stmt"
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
-        // specifically for return statements
+        if self.peek() == Some(TokenKind::If) {
+            self.iter.next();
+            // condition
+            self.expect(TokenKind::LParen, "'('")?;
+            let condition = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "')'")?;
+
+            // then, if there is a brace then this would be a block statement
+            // but for now this would just be a single statement
+            let then = Box::new(self.parse_stmt()?);
+
+            // else is optional
+            let else_stmt = if self.peek() == Some(TokenKind::Else) {
+                self.iter.next();
+                Some(Box::new(self.parse_stmt()?))
+            } else {
+                None
+            };
+            return Ok(Stmt::If {
+                condition,
+                then,
+                else_stmt,
+            });
+        }
+
+        // return expressions
         if self.peek() == Some(TokenKind::Return) {
             self.iter.next();
             let expr = self.parse_expr()?;
+            self.expect(TokenKind::Semicolon, "';'")?;
             return Ok(Stmt::Return(expr));
         }
 
-        // declarations like "int x" and "int x = expr"
+        // declarations like "int x;" and "int x = expr;"
         if self.peek() == Some(TokenKind::Int) {
             self.iter.next();
             if let Some(TokenKind::Identifier(name)) = self.peek() {
@@ -141,14 +171,16 @@ impl<'a> Parser<'a> {
                 if self.peek() == Some(TokenKind::Equal) {
                     self.iter.next();
                     let value = self.parse_expr()?;
+                    self.expect(TokenKind::Semicolon, "';'")?;
                     return Ok(Stmt::DeclAssignment(ident, value));
                 }
+                self.expect(TokenKind::Semicolon, "';'")?;
                 return Ok(Stmt::Decl(ident));
             }
             return Err(self.expected_error("an identifier after 'int'"));
         }
 
-        // assignments like "x = expr"
+        // assignments like "x = expr;"
         if let Some(TokenKind::Identifier(name)) = self.peek() {
             let span = self.iter.peek().unwrap().span;
             self.iter.next();
@@ -156,12 +188,18 @@ impl<'a> Parser<'a> {
             if self.peek() == Some(TokenKind::Equal) {
                 self.iter.next();
                 let value = self.parse_expr()?;
+                self.expect(TokenKind::Semicolon, "';'")?;
                 return Ok(Stmt::Assign(ident, value));
             }
+            self.expect(TokenKind::Semicolon, "';'")?;
             return Ok(Stmt::Expr(Expr::Variable(ident)));
         }
 
-        Ok(Stmt::Expr(self.parse_expr()?))
+        let expr = self.parse_expr()?;
+
+        // statements should consume their own ;
+        self.expect(TokenKind::Semicolon, "';'")?;
+        Ok(Stmt::Expr(expr))
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
