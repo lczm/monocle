@@ -5,6 +5,14 @@ fn compile(source: &str) -> String {
     codegen(crate::parse(tokens, source).unwrap()).unwrap()
 }
 
+fn asm_eq(actual: impl AsRef<str>, expected: impl AsRef<str>) {
+    let expected = expected.as_ref();
+    assert_eq!(
+        actual.as_ref(),
+        expected.strip_prefix('\n').unwrap_or(expected)
+    );
+}
+
 #[test]
 fn empty_program_returns_zero() {
     let expected = r#"
@@ -14,7 +22,7 @@ main:
 	li a0, 0
 	ret
 "#;
-    assert_eq!(codegen(vec![]).unwrap(), expected);
+    asm_eq(codegen(vec![]).unwrap(), expected);
 }
 
 #[test]
@@ -29,9 +37,9 @@ main:
 	ret
 "#
         );
-        assert_eq!(
+        asm_eq(
             codegen(vec![Statement::Expr(Expr::Integer(value))]).unwrap(),
-            expected
+            expected,
         );
     }
 }
@@ -47,7 +55,7 @@ main:
 	neg a0, a0
 	ret
 "#;
-    assert_eq!(compile("-42;"), expected);
+    asm_eq(compile("-42;"), expected);
 }
 
 #[test]
@@ -66,7 +74,7 @@ main:
 	neg a0, a0
 	ret
 "#;
-    assert_eq!(compile("-(1 + 2);"), expected);
+    asm_eq(compile("-(1 + 2);"), expected);
 }
 
 #[test]
@@ -95,7 +103,7 @@ main:
         );
         assert_eq!(
             compile(&format!("20 {operator} 3;")),
-            expected,
+            expected.strip_prefix('\n').unwrap_or(expected.as_str()),
             "{operator}"
         );
     }
@@ -128,7 +136,7 @@ main:
         );
         assert_eq!(
             compile(&format!("20 {operator} 3;")),
-            expected,
+            expected.strip_prefix('\n').unwrap_or(expected.as_str()),
             "{operator}"
         );
     }
@@ -155,7 +163,7 @@ main:
 	sub a0, t0, a0
 	ret
 "#;
-    assert_eq!(compile("10 - (6 - 2);"), expected);
+    asm_eq(compile("10 - (6 - 2);"), expected);
 }
 
 #[test]
@@ -174,7 +182,7 @@ main:
 	li a0, 7
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -195,7 +203,7 @@ main:
 .Lmain_end:
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -222,7 +230,7 @@ main:
 .Lmain_end:
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -241,7 +249,7 @@ main:
 .Ldone0:
 	ret
 "#;
-    assert_eq!(compile("1 && 2;"), expected);
+    asm_eq(compile("1 && 2;"), expected);
 }
 
 #[test]
@@ -260,7 +268,7 @@ main:
 .Ldone0:
 	ret
 "#;
-    assert_eq!(compile("1 || 0;"), expected);
+    asm_eq(compile("1 || 0;"), expected);
 }
 
 #[test]
@@ -285,7 +293,7 @@ main:
 .Ldone0:
 	ret
 "#;
-    assert_eq!(compile("0 && (1 + 2);"), expected);
+    asm_eq(compile("0 && (1 + 2);"), expected);
 }
 
 #[test]
@@ -311,7 +319,7 @@ main:
 .Ldone1:
 	ret
 "#;
-    assert_eq!(compile("1 && 0 || 1;"), expected);
+    asm_eq(compile("1 && 0 || 1;"), expected);
 }
 
 #[test]
@@ -328,7 +336,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -347,7 +355,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 
     // three 8-byte slots are 24 bytes, which rounds up to 32 (a 16-multiple)
     let source = "
@@ -364,7 +372,7 @@ main:
 	addi sp, sp, 32
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -387,7 +395,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -417,7 +425,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -446,7 +454,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -497,7 +505,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -565,7 +573,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -601,7 +609,7 @@ main:
 	addi sp, sp, 16
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
 
 #[test]
@@ -611,7 +619,8 @@ int main() {
     if (1) return 40;
     return 0;
 }";
-    let expected = r#"	.text
+    let expected = r#"
+	.text
 	.globl main
 main:
 	li a0, 1
@@ -624,5 +633,5 @@ main:
 .Lmain_end:
 	ret
 "#;
-    assert_eq!(compile(source), expected);
+    asm_eq(compile(source), expected);
 }
