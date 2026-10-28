@@ -249,6 +249,26 @@ fn report_invalid_tokens_with_spans() {
 }
 
 #[test]
+fn lex_control_flow_keywords() {
+    assert_eq!(
+        token_kinds(
+            lex(r#"
+if else while for break continue
+"#)
+            .unwrap()
+        ),
+        vec![
+            TokenKind::If,
+            TokenKind::Else,
+            TokenKind::While,
+            TokenKind::For,
+            TokenKind::Break,
+            TokenKind::Continue,
+        ]
+    );
+}
+
+#[test]
 fn lex_i64_min_magnitude_and_i64_max() {
     assert_eq!(
         token_kinds(lex("-9223372036854775808").unwrap()),

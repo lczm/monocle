@@ -40,6 +40,20 @@ pub enum TokenKind {
     #[token("return")]
     Return,
 
+    // control flow
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
+    #[token("while")]
+    While,
+    #[token("for")]
+    For,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
+
     // Consume whole identifiers so `intmain` cannot become `int main`.
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
     Identifier(String),
