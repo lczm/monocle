@@ -1,16 +1,16 @@
-use crate::{BinaryOp, Expr, Stmt, UnaryOp, errors::CodegenError};
+use crate::{BinaryOp, Expr, Statement, UnaryOp, errors::CodegenError};
 
 struct Frame {
     slots: Vec<(String, i32)>,
     size: i32,
 }
 
-fn build_frame(statements: &Vec<Stmt>) -> Frame {
+fn build_frame(statements: &Vec<Statement>) -> Frame {
     let mut slots = Vec::new();
     let mut next_offset = 0;
 
     for statement in statements {
-        if let Stmt::Decl(identifier) | Stmt::DeclAssignment(identifier, _) = statement {
+        if let Statement::Decl(identifier) | Statement::DeclAssignment(identifier, _) = statement {
             slots.push((identifier.name.clone(), next_offset));
             next_offset += 8;
         }
@@ -46,7 +46,7 @@ fn lookup_slot(frame: &Frame, name: &String) -> Result<i32, CodegenError> {
 }
 
 // takes ast and emits RV64IM asm
-pub fn codegen(statements: Vec<Stmt>) -> Result<String, CodegenError> {
+pub fn codegen(statements: Vec<Statement>) -> Result<String, CodegenError> {
     let mut assembly = String::new();
     emit_headers(&mut assembly);
 
@@ -62,30 +62,18 @@ pub fn codegen(statements: Vec<Stmt>) -> Result<String, CodegenError> {
     let empty = statements.is_empty();
     let mut has_return = false;
     // labels that we need to emit for short-circuit jumps
-    // they need to be unique so we increment per use of And / Or
+    // they need to be unique so we increment per use of And / Or / if
     let mut next_label = 0_u32;
+
+    // run through all the statements and emit code for each one in order
     for statement in statements {
-        match statement {
-            Stmt::Expr(expr) => emit_expr(&expr, &mut assembly, &mut next_label, &frame)?,
-            // declarations only reserve space at the start when doing the pre-pass
-            // it doesnt emit any code
-            Stmt::Decl(_) => {}
-            // name = expr
-            // emit the value lands to a0 then we store it into names slot
-            Stmt::Assign(ident, value) | Stmt::DeclAssignment(ident, value) => {
-                emit_expr(&value, &mut assembly, &mut next_label, &frame)?;
-                let offset = lookup_slot(&frame, &ident.name)?;
-                emit_line(&mut assembly, &format!("sd a0, {offset}(sp)"));
-            }
-            // for now we only support a single return statement
-            // and it must be the last statement in the program
-            Stmt::Return(expr) => {
-                has_return = true;
-                emit_expr(&expr, &mut assembly, &mut next_label, &frame)?;
-                // the expression's value is in a0; skip any statements after it
-                emit_line(&mut assembly, "j .Lmain_end");
-            }
-        }
+        emit_statement(
+            &statement,
+            &mut assembly,
+            &mut next_label,
+            &frame,
+            &mut has_return,
+        )?;
     }
 
     if empty {
@@ -118,6 +106,65 @@ fn emit_line(assembly: &mut String, line: &str) {
 fn emit_label(assembly: &mut String, label: &str) {
     assembly.push_str(label);
     assembly.push_str(":\n");
+}
+
+fn emit_statement(
+    statement: &Statement,
+    assembly: &mut String,
+    next_label: &mut u32,
+    frame: &Frame,
+    has_return: &mut bool,
+) -> Result<(), CodegenError> {
+    match statement {
+        Statement::Expr(expr) => emit_expr(expr, assembly, next_label, frame)?,
+        // declarations only reserve space at the start when doing the pre-pass
+        // it doesnt emit any code
+        Statement::Decl(_) => {}
+        // emit the value lands to a0 then we store it into names slot
+        Statement::Assign(identifier, value) | Statement::DeclAssignment(identifier, value) => {
+            emit_expr(value, assembly, next_label, frame)?;
+            let offset = lookup_slot(frame, &identifier.name)?;
+            emit_line(assembly, &format!("sd a0, {offset}(sp)"));
+        }
+        Statement::Return(expr) => {
+            *has_return = true;
+            emit_expr(expr, assembly, next_label, frame)?;
+            // the expression's value is in a0; skip any statements after it
+            emit_line(assembly, "j .Lmain_end");
+        }
+        Statement::If {
+            condition,
+            then,
+            else_stmt,
+        } => {
+            // generate the condition
+            emit_expr(condition, assembly, next_label, frame)?;
+            // unique suffix for this if, so nested ifs and short-circuits in
+            // the condition do not collide with its labels
+            let l = *next_label;
+            *next_label += 1;
+
+            if let Some(else_stmt) = else_stmt {
+                // condition is false, we jump to the else branch, skipping then statement
+                emit_line(assembly, &format!("beqz a0, .Lelse{l}"));
+                // emit the then branch which gets ran if condition is true
+                emit_statement(then, assembly, next_label, frame, has_return)?;
+                // jump to the end of the if statement, skipping the else branch
+                emit_line(assembly, &format!("j .Lend{l}"));
+                // emit the else branch with its label
+                emit_label(assembly, &format!(".Lelse{l}"));
+                emit_statement(else_stmt, assembly, next_label, frame, has_return)?;
+                // skips to the end
+                emit_label(assembly, &format!(".Lend{l}"));
+            } else {
+                // falsy condition jumps straight to the end
+                emit_line(assembly, &format!("beqz a0, .Lend{l}"));
+                emit_statement(then, assembly, next_label, frame, has_return)?;
+                emit_label(assembly, &format!(".Lend{l}"));
+            }
+        }
+    }
+    Ok(())
 }
 
 // Every expression leaves its result in a0 and restores sp.
