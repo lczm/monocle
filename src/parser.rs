@@ -54,6 +54,10 @@ pub enum Statement {
         then: Box<Statement>,
         else_stmt: Option<Box<Statement>>,
     },
+    // "{ ... }"
+    Block {
+        statements: Vec<Statement>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -127,6 +131,7 @@ impl<'a> Parser<'a> {
     // stmts are
     //     | "x = expr;" | "int x = expr;" | "int x;" | "return expr;" | "expr;"
     //     | "if (expr) stmt" or "if (expr) stmt else stmt"
+    //     | "{ ... }"
     fn parse_stmt(&mut self) -> Result<Statement, ParseError> {
         if self.peek() == Some(TokenKind::If) {
             self.iter.next();
@@ -178,6 +183,20 @@ impl<'a> Parser<'a> {
                 return Ok(Statement::Decl(ident));
             }
             return Err(self.expected_error("an identifier after 'int'"));
+        }
+
+        if self.peek() == Some(TokenKind::LBrace) {
+            self.iter.next();
+            let mut statements = Vec::new();
+            while self.peek() != Some(TokenKind::RBrace) {
+                if self.peek().is_none() {
+                    return Err(self.expected_error("a statement or '}'"));
+                }
+                statements.push(self.parse_stmt()?);
+            }
+            // consume the right brace
+            self.iter.next();
+            return Ok(Statement::Block { statements });
         }
 
         // assignments like "x = expr;"

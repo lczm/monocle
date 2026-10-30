@@ -163,6 +163,11 @@ fn emit_statement(
                 emit_label(assembly, &format!(".Lend{l}"));
             }
         }
+        Statement::Block { statements } => {
+            for stmt in statements {
+                emit_statement(stmt, assembly, next_label, frame, has_return)?;
+            }
+        }
     }
     Ok(())
 }

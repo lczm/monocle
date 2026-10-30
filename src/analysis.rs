@@ -56,6 +56,12 @@ fn check_stmt(
             }
             Ok(())
         }
+        Statement::Block { statements } => {
+            for stmt in statements {
+                check_stmt(stmt, declared, source)?;
+            }
+            Ok(())
+        }
     }
 }
 

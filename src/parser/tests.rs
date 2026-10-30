@@ -538,3 +538,23 @@ fn if_body_may_not_be_empty() {
         "{error:?}"
     );
 }
+
+#[test]
+fn parse_block_statements() {
+    let source = "
+int main() {
+    {
+        int x;
+        x = 1;
+    }
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![Statement::Block {
+            statements: vec![
+                Statement::Decl(identifier("x")),
+                Statement::Assign(identifier("x"), Expr::Integer(1)),
+            ],
+        }]
+    );
+}
