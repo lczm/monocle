@@ -4,7 +4,7 @@ use miette::NamedSource;
 
 use crate::{
     errors::AnalysisError,
-    parser::{Expr, Identifier, Statement},
+    parser::{Block, Expr, Identifier, Statement},
 };
 
 // name resolution check over AST
@@ -50,7 +50,7 @@ fn check_stmt(
             }
             Ok(())
         }
-        Statement::Block { statements } => {
+        Statement::Block(Block { statements }) => {
             // a block is a new scope: its names must disappear when it ends
             scopes.push(HashSet::new());
             // the pop must run even when a statement inside fails

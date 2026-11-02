@@ -550,11 +550,11 @@ int main() {
 }";
     assert_eq!(
         parse_stmts(source).unwrap(),
-        vec![Statement::Block {
+        vec![Statement::Block(Block {
             statements: vec![
                 Statement::Decl(identifier("x")),
                 Statement::Assign(identifier("x"), Expr::Integer(1)),
             ],
-        }]
+        })]
     );
 }

@@ -1,24 +1,32 @@
-use crate::{BinaryOp, Expr, Statement, UnaryOp, errors::CodegenError};
+use crate::{BinaryOp, Block, Expr, Statement, UnaryOp, errors::CodegenError};
 
 struct Frame {
     slots: Vec<(String, i32)>,
     size: i32,
 }
 
-fn build_frame(statements: &Vec<Statement>) -> Frame {
+fn build_frame(body: &Block) -> Frame {
     let mut slots = Vec::new();
     let mut next_offset = 0;
-
-    for statement in statements {
-        if let Statement::Decl(identifier) | Statement::DeclAssignment(identifier, _) = statement {
-            slots.push((identifier.name.clone(), next_offset));
-            next_offset += 8;
-        }
-    }
+    collect_slots(&body.statements, &mut slots, &mut next_offset);
 
     Frame {
         slots,
         size: round_up_to_16(next_offset),
+    }
+}
+
+fn collect_slots(statements: &[Statement], slots: &mut Vec<(String, i32)>, next_offset: &mut i32) {
+    for statement in statements {
+        match statement {
+            Statement::Decl(identifier) | Statement::DeclAssignment(identifier, _) => {
+                slots.push((identifier.name.clone(), *next_offset));
+                *next_offset += 8;
+            }
+            Statement::Block(Block { statements }) => collect_slots(statements, slots, next_offset),
+            // nothing else can declare new names
+            _ => {}
+        }
     }
 }
 
@@ -50,31 +58,32 @@ pub fn codegen(statements: Vec<Statement>) -> Result<String, CodegenError> {
     let mut assembly = String::new();
     emit_headers(&mut assembly);
 
+    let empty = statements.is_empty();
+    // put the whole program in 1 block for now, when we have functions
+    // then it emits one block per function
+    let body = Block { statements };
+
     // todo: when we parse individual functions, we have to build a frame for each function
-    // only deal with the main() function for now
     // but for now, this can just be a single frame for the entire program
-    let frame = build_frame(&statements);
+    let frame = build_frame(&body);
     let has_frame = frame.size > 0;
     if has_frame {
         reserve_stack(&mut assembly, frame.size);
     }
 
-    let empty = statements.is_empty();
     let mut has_return = false;
     // labels that we need to emit for short-circuit jumps
     // they need to be unique so we increment per use of And / Or / if
     let mut next_label = 0_u32;
 
-    // run through all the statements and emit code for each one in order
-    for statement in statements {
-        emit_statement(
-            &statement,
-            &mut assembly,
-            &mut next_label,
-            &frame,
-            &mut has_return,
-        )?;
-    }
+    // run through the whole body and emit code for each statement in order
+    emit_statement(
+        &Statement::Block(body),
+        &mut assembly,
+        &mut next_label,
+        &frame,
+        &mut has_return,
+    )?;
 
     if empty {
         emit_line(&mut assembly, "li a0, 0");
@@ -163,7 +172,7 @@ fn emit_statement(
                 emit_label(assembly, &format!(".Lend{l}"));
             }
         }
-        Statement::Block { statements } => {
+        Statement::Block(Block { statements }) => {
             for stmt in statements {
                 emit_statement(stmt, assembly, next_label, frame, has_return)?;
             }

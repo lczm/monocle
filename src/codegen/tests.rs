@@ -376,6 +376,36 @@ main:
 }
 
 #[test]
+fn declarations_inside_blocks_get_slots() {
+    // decls are found by walking into blocks, and they resolve in their
+    // own slot
+    let source = "
+int main() {
+    { int x = 2 + 3; return x; }
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 2
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 3
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	sd a0, 0(sp)
+	ld a0, 0(sp)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+}
+
+#[test]
 fn declarations_coexist_with_statements_and_return() {
     let source = "
 int main() {

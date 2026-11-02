@@ -55,9 +55,13 @@ pub enum Statement {
         else_stmt: Option<Box<Statement>>,
     },
     // "{ ... }"
-    Block {
-        statements: Vec<Statement>,
-    },
+    Block(Block),
+}
+
+// a "{ ... }" block of statements
+#[derive(Debug, PartialEq)]
+pub struct Block {
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -196,7 +200,7 @@ impl<'a> Parser<'a> {
             }
             // consume the right brace
             self.iter.next();
-            return Ok(Statement::Block { statements });
+            return Ok(Statement::Block(Block { statements }));
         }
 
         // assignments like "x = expr;"
