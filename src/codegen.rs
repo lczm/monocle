@@ -91,6 +91,7 @@ pub fn codegen(statements: Vec<Statement>) -> Result<String, CodegenError> {
     let has_frame = frame.size > 0;
     if has_frame {
         reserve_stack(&mut assembly, frame.size);
+        emit_frame_pointer(&mut assembly);
     }
 
     let mut has_return = false;
@@ -131,6 +132,12 @@ pub fn codegen(statements: Vec<Statement>) -> Result<String, CodegenError> {
     Ok(assembly)
 }
 
+fn emit_frame_pointer(assembly: &mut String) {
+    // todo: s0 is callee-saved, so once functions can call each other
+    // it must be saved and restored in the prologue and epilogue
+    emit_line(assembly, "mv s0, sp");
+}
+
 fn emit_headers(assembly: &mut String) {
     emit_line(assembly, ".text");
     emit_line(assembly, ".globl main");
@@ -168,13 +175,13 @@ fn emit_statement(
         Statement::Assign(identifier, value) => {
             emit_expr(value, assembly, next_label, scopes)?;
             let offset = lookup_slot(scopes, &identifier.name)?;
-            emit_line(assembly, &format!("sd a0, {offset}(sp)"));
+            emit_line(assembly, &format!("sd a0, {offset}(s0)"));
         }
         // declaration first, so the initializer can reference the name
         Statement::DeclAssignment(_, value) => {
             let offset = declare_slot(frame, slot_index, scopes)?;
             emit_expr(value, assembly, next_label, scopes)?;
-            emit_line(assembly, &format!("sd a0, {offset}(sp)"));
+            emit_line(assembly, &format!("sd a0, {offset}(s0)"));
         }
         Statement::Return(expr) => {
             *has_return = true;
@@ -219,6 +226,25 @@ fn emit_statement(
                 emit_label(assembly, &format!(".Lend{l}"));
             }
         }
+        Statement::While { condition, body } => {
+            // create a label so can jump back to the top of the loop
+            let l = *next_label;
+            *next_label += 1;
+            emit_label(assembly, &format!(".Lcond{l}"));
+
+            // the condition evaluation
+            emit_expr(condition, assembly, next_label, scopes)?;
+            // condition is false, go to the end and skip the body
+            emit_line(assembly, &format!("beqz a0, .Lend{l}"));
+
+            // the body of the loop
+            emit_statement(
+                body, assembly, next_label, frame, has_return, scopes, slot_index,
+            )?;
+            // loop back to the top and reeval the condition
+            emit_line(assembly, &format!("j .Lcond{l}"));
+            emit_label(assembly, &format!(".Lend{l}"));
+        }
         Statement::Block(Block { statements }) => {
             // a block is a new scope: its names must disappear when it ends
             scopes.push(HashMap::new());
@@ -250,7 +276,7 @@ fn emit_expr(
         // load the variable's slot into a0
         Expr::Variable(identifier) => {
             let offset = lookup_slot(scopes, &identifier.name)?;
-            emit_line(assembly, &format!("ld a0, {offset}(sp)"));
+            emit_line(assembly, &format!("ld a0, {offset}(s0)"));
             Ok(())
         }
         Expr::Unary { op, operand } => {
