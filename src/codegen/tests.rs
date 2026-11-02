@@ -805,3 +805,58 @@ main:
 "#;
     asm_eq(compile(source), expected);
 }
+
+#[test]
+fn for_loop_emits_init_once_update_per_iteration() {
+    let source = "
+int main() {
+    int sum = 0;
+    for (int i = 0; i < 4; i + 1) {
+		sum = sum + i;
+	}
+    return sum;
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	mv s0, sp
+	li a0, 0
+	sd a0, 0(s0)
+	li a0, 0
+	sd a0, 8(s0)
+.Lcond0:
+	ld a0, 8(s0)
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 4
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	slt a0, t0, a0
+	beqz a0, .Lend0
+	ld a0, 0(s0)
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	ld a0, 8(s0)
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	sd a0, 0(s0)
+	ld a0, 8(s0)
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 1
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	j .Lcond0
+.Lend0:
+	ld a0, 0(s0)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+}

@@ -26,6 +26,13 @@ fn collect_slots(statements: &[Statement], slots: &mut Vec<(String, i32)>, next_
                 *next_offset += 8;
             }
             Statement::Block(Block { statements }) => collect_slots(statements, slots, next_offset),
+            // a for-init statement can also declare a name, and its slot lives in this frame;
+            // init is a single statement, so borrow it as a 1-element slice to recurse
+            Statement::For {
+                init: Some(init), ..
+            } => {
+                collect_slots(std::slice::from_ref(init.as_ref()), slots, next_offset);
+            }
             // nothing else can declare new names
             _ => {}
         }
@@ -251,7 +258,35 @@ fn emit_statement(
             update,
             body,
         } => {
-            todo!("emit for loop");
+            // init runs before the loop starts
+            if let Some(init) = init {
+                emit_statement(
+                    init, assembly, next_label, frame, has_return, scopes, slot_index,
+                )?;
+            }
+
+            // the for loop itself is just a while loop with an optional update
+            let l = *next_label;
+            *next_label += 1;
+            emit_label(assembly, &format!(".Lcond{l}"));
+
+            // condition is optional
+            if let Some(condition) = condition {
+                emit_expr(condition, assembly, next_label, scopes)?;
+                emit_line(assembly, &format!("beqz a0, .Lend{l}"));
+            }
+
+            emit_statement(
+                body, assembly, next_label, frame, has_return, scopes, slot_index,
+            )?;
+
+            // optional update
+            if let Some(update) = update {
+                emit_expr(update, assembly, next_label, scopes)?;
+            }
+
+            emit_line(assembly, &format!("j .Lcond{l}"));
+            emit_label(assembly, &format!(".Lend{l}"));
         }
         Statement::Block(Block { statements }) => {
             // a block is a new scope: its names must disappear when it ends
