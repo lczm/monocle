@@ -59,6 +59,13 @@ pub enum Statement {
         condition: Expr,
         body: Box<Statement>,
     },
+    // "for (stmt; expr; expr) stmt"
+    For {
+        init: Option<Box<Statement>>,
+        condition: Option<Expr>,
+        update: Option<Expr>,
+        body: Box<Statement>,
+    },
     // "{ ... }"
     Block(Block),
 }

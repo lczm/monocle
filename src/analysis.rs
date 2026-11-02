@@ -54,6 +54,23 @@ fn check_stmt(
             check_expr(condition, scopes, source)?;
             check_stmt(body, scopes, source)
         }
+        Statement::For {
+            init,
+            condition,
+            update,
+            body,
+        } => {
+            if let Some(init) = init {
+                check_stmt(init, scopes, source)?;
+            }
+            if let Some(condition) = condition {
+                check_expr(condition, scopes, source)?;
+            }
+            if let Some(update) = update {
+                check_expr(update, scopes, source)?;
+            }
+            check_stmt(body, scopes, source)
+        }
         Statement::Block(Block { statements }) => {
             // a block is a new scope: its names must disappear when it ends
             scopes.push(HashSet::new());

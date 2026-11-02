@@ -245,6 +245,14 @@ fn emit_statement(
             emit_line(assembly, &format!("j .Lcond{l}"));
             emit_label(assembly, &format!(".Lend{l}"));
         }
+        Statement::For {
+            init,
+            condition,
+            update,
+            body,
+        } => {
+            todo!("emit for loop");
+        }
         Statement::Block(Block { statements }) => {
             // a block is a new scope: its names must disappear when it ends
             scopes.push(HashMap::new());
