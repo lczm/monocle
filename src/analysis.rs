@@ -50,6 +50,10 @@ fn check_stmt(
             }
             Ok(())
         }
+        Statement::While { condition, body } => {
+            check_expr(condition, scopes, source)?;
+            check_stmt(body, scopes, source)
+        }
         Statement::Block(Block { statements }) => {
             // a block is a new scope: its names must disappear when it ends
             scopes.push(HashSet::new());

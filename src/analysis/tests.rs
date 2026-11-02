@@ -125,6 +125,41 @@ int main() {
 }
 
 #[test]
+fn undeclared_variable_in_a_while_condition_is_flagged() {
+    let source = "
+int main() {
+    while (z) x = 1;
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 25 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn undeclared_variable_in_a_while_body_is_flagged() {
+    let source = "
+int main() {
+    int x;
+    while (x) z = 1;
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 39 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn if_bodies_can_use_declared_variables() {
     let source = "
 int main() {
