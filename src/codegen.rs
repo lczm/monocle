@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{BinaryOp, Block, Expr, Statement, UnaryOp, errors::CodegenError};
 
 struct Frame {
@@ -44,13 +46,33 @@ fn release_stack(assembly: &mut String, bytes: i32) {
     emit_line(assembly, &format!("addi sp, sp, {bytes}"));
 }
 
-fn lookup_slot(frame: &Frame, name: &String) -> Result<i32, CodegenError> {
-    for (slot_name, offset) in frame.slots.iter() {
-        if *slot_name == *name {
-            return Ok(*offset);
+fn declare_slot(
+    frame: &Frame,
+    slot_index: &mut usize,
+    scopes: &mut [HashMap<String, i32>],
+) -> Result<i32, CodegenError> {
+    // the pre-pass slots are in DFS order, so consume it on a declaration statement
+    let (name, offset) = &frame.slots[*slot_index];
+    *slot_index += 1;
+    // insert the name and its offset into the current scope, which is the last one in the stack
+    scopes
+        .last_mut()
+        .expect("popped global scope, should never happen")
+        .insert(name.clone(), *offset);
+    Ok(*offset)
+}
+
+// an identifier being used must be declared in some scope; we check the
+// scopes inside out, like analysis
+fn lookup_slot(scopes: &[HashMap<String, i32>], name: &str) -> Result<i32, CodegenError> {
+    for scope in scopes.iter().rev() {
+        if let Some(&offset) = scope.get(name) {
+            return Ok(offset);
         }
     }
-    Err(CodegenError { name: name.clone() })
+    Err(CodegenError {
+        name: name.to_owned(),
+    })
 }
 
 // takes ast and emits RV64IM asm
@@ -76,6 +98,13 @@ pub fn codegen(statements: Vec<Statement>) -> Result<String, CodegenError> {
     // they need to be unique so we increment per use of And / Or / if
     let mut next_label = 0_u32;
 
+    // scope stack that pushes and pops, add a global scope
+    let mut scopes: Vec<HashMap<String, i32>> = Vec::new();
+    scopes.push(HashMap::new());
+
+    // the walk consumes the pre-pass slots in the same DFS order
+    let mut slot_index = 0;
+
     // run through the whole body and emit code for each statement in order
     emit_statement(
         &Statement::Block(body),
@@ -83,6 +112,8 @@ pub fn codegen(statements: Vec<Statement>) -> Result<String, CodegenError> {
         &mut next_label,
         &frame,
         &mut has_return,
+        &mut scopes,
+        &mut slot_index,
     )?;
 
     if empty {
@@ -123,21 +154,31 @@ fn emit_statement(
     next_label: &mut u32,
     frame: &Frame,
     has_return: &mut bool,
+    scopes: &mut Vec<HashMap<String, i32>>,
+    slot_index: &mut usize,
 ) -> Result<(), CodegenError> {
     match statement {
-        Statement::Expr(expr) => emit_expr(expr, assembly, next_label, frame)?,
-        // declarations only reserve space at the start when doing the pre-pass
-        // it doesnt emit any code
-        Statement::Decl(_) => {}
+        Statement::Expr(expr) => emit_expr(expr, assembly, next_label, scopes)?,
+        // declarations reserve their slot in the pre-pass; the walk only
+        // registers the name in its scope
+        Statement::Decl(_) => {
+            declare_slot(frame, slot_index, scopes)?;
+        }
         // emit the value lands to a0 then we store it into names slot
-        Statement::Assign(identifier, value) | Statement::DeclAssignment(identifier, value) => {
-            emit_expr(value, assembly, next_label, frame)?;
-            let offset = lookup_slot(frame, &identifier.name)?;
+        Statement::Assign(identifier, value) => {
+            emit_expr(value, assembly, next_label, scopes)?;
+            let offset = lookup_slot(scopes, &identifier.name)?;
+            emit_line(assembly, &format!("sd a0, {offset}(sp)"));
+        }
+        // declaration first, so the initializer can reference the name
+        Statement::DeclAssignment(_, value) => {
+            let offset = declare_slot(frame, slot_index, scopes)?;
+            emit_expr(value, assembly, next_label, scopes)?;
             emit_line(assembly, &format!("sd a0, {offset}(sp)"));
         }
         Statement::Return(expr) => {
             *has_return = true;
-            emit_expr(expr, assembly, next_label, frame)?;
+            emit_expr(expr, assembly, next_label, scopes)?;
             // the expression's value is in a0; skip any statements after it
             emit_line(assembly, "j .Lmain_end");
         }
@@ -147,7 +188,7 @@ fn emit_statement(
             else_stmt,
         } => {
             // generate the condition
-            emit_expr(condition, assembly, next_label, frame)?;
+            emit_expr(condition, assembly, next_label, scopes)?;
             // unique suffix for this if, so nested ifs and short-circuits in
             // the condition do not collide with its labels
             let l = *next_label;
@@ -157,25 +198,38 @@ fn emit_statement(
                 // condition is false, we jump to the else branch, skipping then statement
                 emit_line(assembly, &format!("beqz a0, .Lelse{l}"));
                 // emit the then branch which gets ran if condition is true
-                emit_statement(then, assembly, next_label, frame, has_return)?;
+                emit_statement(
+                    then, assembly, next_label, frame, has_return, scopes, slot_index,
+                )?;
                 // jump to the end of the if statement, skipping the else branch
                 emit_line(assembly, &format!("j .Lend{l}"));
                 // emit the else branch with its label
                 emit_label(assembly, &format!(".Lelse{l}"));
-                emit_statement(else_stmt, assembly, next_label, frame, has_return)?;
+                emit_statement(
+                    else_stmt, assembly, next_label, frame, has_return, scopes, slot_index,
+                )?;
                 // skips to the end
                 emit_label(assembly, &format!(".Lend{l}"));
             } else {
                 // falsy condition jumps straight to the end
                 emit_line(assembly, &format!("beqz a0, .Lend{l}"));
-                emit_statement(then, assembly, next_label, frame, has_return)?;
+                emit_statement(
+                    then, assembly, next_label, frame, has_return, scopes, slot_index,
+                )?;
                 emit_label(assembly, &format!(".Lend{l}"));
             }
         }
         Statement::Block(Block { statements }) => {
-            for stmt in statements {
-                emit_statement(stmt, assembly, next_label, frame, has_return)?;
-            }
+            // a block is a new scope: its names must disappear when it ends
+            scopes.push(HashMap::new());
+            // the pop must run even when a statement inside fails
+            let result = statements.iter().try_for_each(|stmt| {
+                emit_statement(
+                    stmt, assembly, next_label, frame, has_return, scopes, slot_index,
+                )
+            });
+            scopes.pop();
+            result?;
         }
     }
     Ok(())
@@ -186,7 +240,7 @@ fn emit_expr(
     expression: &Expr,
     assembly: &mut String,
     next_label: &mut u32,
-    frame: &Frame,
+    scopes: &[HashMap<String, i32>],
 ) -> Result<(), CodegenError> {
     match expression {
         Expr::Integer(value) => {
@@ -195,12 +249,12 @@ fn emit_expr(
         }
         // load the variable's slot into a0
         Expr::Variable(identifier) => {
-            let offset = lookup_slot(frame, &identifier.name)?;
+            let offset = lookup_slot(scopes, &identifier.name)?;
             emit_line(assembly, &format!("ld a0, {offset}(sp)"));
             Ok(())
         }
         Expr::Unary { op, operand } => {
-            emit_expr(operand, assembly, next_label, frame)?;
+            emit_expr(operand, assembly, next_label, scopes)?;
             if *op == UnaryOp::Minus {
                 emit_line(assembly, "neg a0, a0");
             }
@@ -212,7 +266,7 @@ fn emit_expr(
             // short-circuit for these operators and not evaluate RHS if LHS is enough
             if *op == BinaryOp::And || *op == BinaryOp::Or {
                 // emit the LHS of the binary
-                emit_expr(lhs, assembly, next_label, frame)?;
+                emit_expr(lhs, assembly, next_label, scopes)?;
                 // unique suffix for this pair of labels, so nested
                 // short-circuits do not repeat a label name
                 let l = *next_label;
@@ -230,7 +284,7 @@ fn emit_expr(
 
                 // the LHS did not decide: evaluate the RHS and
                 // normalize it to 0 or 1
-                emit_expr(rhs, assembly, next_label, frame)?;
+                emit_expr(rhs, assembly, next_label, scopes)?;
                 emit_line(assembly, "snez a0, a0");
                 // skip over the constant load of the short-circuit path
                 emit_line(assembly, &format!("j .Ldone{l}"));
@@ -251,7 +305,7 @@ fn emit_expr(
             }
 
             // emit the LHS of the binary
-            emit_expr(lhs, assembly, next_label, frame)?;
+            emit_expr(lhs, assembly, next_label, scopes)?;
             // expands the stack pointer by 16 bytes
             // we use 16 bytes here even though the LHS is only 8 bytes because
             // RISC-V ABI requires the stack pointer to always be 16-byte aligned
@@ -260,7 +314,7 @@ fn emit_expr(
             emit_line(assembly, "sd a0, 0(sp)");
 
             // emit the RHS of the binary
-            emit_expr(rhs, assembly, next_label, frame)?;
+            emit_expr(rhs, assembly, next_label, scopes)?;
             // load the previously emitted LHS into t0
             emit_line(assembly, "ld t0, 0(sp)");
             // restore the stack pointer by the space we emitted initially

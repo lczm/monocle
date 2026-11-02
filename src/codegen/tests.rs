@@ -406,6 +406,89 @@ main:
 }
 
 #[test]
+fn shadows_resolve_to_the_innermost_live_scope() {
+    // after the block ends, its x is gone: return reads the outer x's slot
+    let source = "
+int main() {
+    int x = 1;
+    {
+		int x = 2;
+	}
+    return x;
+}";
+    // -16 because 8 for the outer x, and inner x 8
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 1
+	sd a0, 0(sp)
+	li a0, 2
+	sd a0, 8(sp)
+	ld a0, 0(sp)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+
+    let source = "
+int main() {
+    int x = 1;
+    {
+		int x = 2;
+		return x;
+	}
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 1
+	sd a0, 0(sp)
+	li a0, 2
+	sd a0, 8(sp)
+	ld a0, 8(sp)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+
+    // sibling blocks, should return the later x
+    let source = "
+int main() {
+    {
+		int x = 1;
+	}
+    {
+		int x = 2;
+		return x;
+	}
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	li a0, 1
+	sd a0, 0(sp)
+	li a0, 2
+	sd a0, 8(sp)
+	ld a0, 8(sp)
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+}
+
+#[test]
 fn declarations_coexist_with_statements_and_return() {
     let source = "
 int main() {
