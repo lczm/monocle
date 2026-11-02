@@ -168,3 +168,98 @@ int main() {
 }";
     assert_eq!(analyze(source), Ok(()));
 }
+
+#[test]
+fn for_loop_header_and_variables_are_checked() {
+    let source = "
+int main() {
+    int x;
+    for (int i = 0; i < 3; i + 1) {
+        x = i;
+    }
+    for (;;) {
+        x = 1;
+    }
+    return x;
+}";
+    assert_eq!(analyze(source), Ok(()));
+}
+
+#[test]
+fn undeclared_variable_in_a_for_init_is_flagged() {
+    let source = "
+int main() {
+    for (z = 0; i < 3; i + 1) {
+        x = 1;
+    }
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 23 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn undeclared_variable_in_a_for_condition_is_flagged() {
+    let source = "
+int main() {
+    int i;
+    for (i = 0; z < 3; i + 1) {
+        x = 1;
+    }
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 41 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn undeclared_variable_in_a_for_update_is_flagged() {
+    let source = "
+int main() {
+    int i;
+    for (i = 0; i < 3; z + 1) {
+        x = 1;
+    }
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 48 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn undeclared_variable_in_a_for_body_is_flagged() {
+    let source = "
+int main() {
+    int i;
+    for (i = 0; i < 3; i + 1) {
+        z = 1;
+    }
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 65 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
