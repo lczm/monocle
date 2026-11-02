@@ -481,6 +481,30 @@ int main() {
 }
 
 #[test]
+fn parse_while_loops() {
+    let source = "
+int main() {
+    while (z) x = 1;
+    while (y) { z = 2; }
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![
+            Statement::While {
+                condition: Expr::Variable(identifier("z")),
+                body: Box::new(Statement::Assign(identifier("x"), Expr::Integer(1))),
+            },
+            Statement::While {
+                condition: Expr::Variable(identifier("y")),
+                body: Box::new(Statement::Block(Block {
+                    statements: vec![Statement::Assign(identifier("z"), Expr::Integer(2))],
+                })),
+            },
+        ]
+    );
+}
+
+#[test]
 fn else_binds_to_the_nearest_unmatched_if() {
     let source = "
 int main() {

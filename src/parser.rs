@@ -54,6 +54,11 @@ pub enum Statement {
         then: Box<Statement>,
         else_stmt: Option<Box<Statement>>,
     },
+    // "while (expr) stmt"
+    While {
+        condition: Expr,
+        body: Box<Statement>,
+    },
     // "{ ... }"
     Block(Block),
 }
@@ -160,6 +165,16 @@ impl<'a> Parser<'a> {
                 then,
                 else_stmt,
             });
+        }
+
+        // while loops: "while (expr) stmt"
+        if self.peek() == Some(TokenKind::While) {
+            self.iter.next();
+            self.expect(TokenKind::LParen, "'('")?;
+            let condition = self.parse_expr()?;
+            self.expect(TokenKind::RParen, "')'")?;
+            let body = Box::new(self.parse_stmt()?);
+            return Ok(Statement::While { condition, body });
         }
 
         // return expressions
