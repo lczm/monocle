@@ -147,6 +147,7 @@ impl<'a> Parser<'a> {
     // stmts are
     //     | "x = expr;" | "int x = expr;" | "int x;" | "return expr;" | "expr;"
     //     | "if (expr) stmt" or "if (expr) stmt else stmt"
+    //     | "while (expr) stmt" | "for (stmt?; expr?; expr?) stmt"
     //     | "{ ... }"
     fn parse_stmt(&mut self) -> Result<Statement, ParseError> {
         if self.peek() == Some(TokenKind::If) {
@@ -182,6 +183,44 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::RParen, "')'")?;
             let body = Box::new(self.parse_stmt()?);
             return Ok(Statement::While { condition, body });
+        }
+
+        // for loops
+        if self.peek() == Some(TokenKind::For) {
+            self.iter.next();
+            self.expect(TokenKind::LParen, "'('")?;
+
+            // init is a statement, but it can also just be empty
+            let init = if self.peek() == Some(TokenKind::Semicolon) {
+                self.iter.next();
+                None
+            } else {
+                Some(Box::new(self.parse_stmt()?))
+            };
+
+            // condition is an expression but can also be empty
+            let condition = if self.peek() == Some(TokenKind::Semicolon) {
+                None
+            } else {
+                Some(self.parse_expr()?)
+            };
+            self.expect(TokenKind::Semicolon, "';'")?;
+
+            // update is an expression but can also be empty
+            let update = if self.peek() == Some(TokenKind::RParen) {
+                None
+            } else {
+                Some(self.parse_expr()?)
+            };
+            self.expect(TokenKind::RParen, "')'")?;
+
+            let body = Box::new(self.parse_stmt()?);
+            return Ok(Statement::For {
+                init,
+                condition,
+                update,
+                body,
+            });
         }
 
         // return expressions

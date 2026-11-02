@@ -38,6 +38,20 @@ fn identifier(name: &str) -> Identifier {
     }
 }
 
+fn for_loop(
+    init: Option<Statement>,
+    condition: Option<Expr>,
+    update: Option<Expr>,
+    body: Statement,
+) -> Statement {
+    Statement::For {
+        init: init.map(Box::new),
+        condition,
+        update,
+        body: Box::new(body),
+    }
+}
+
 fn assert_ident(identifier: &Identifier, name: &str, span: std::ops::Range<usize>) {
     assert_eq!(identifier.name, name);
     assert_eq!(identifier.span, span.into());
@@ -500,6 +514,121 @@ int main() {
                     statements: vec![Statement::Assign(identifier("z"), Expr::Integer(2))],
                 })),
             },
+        ]
+    );
+}
+
+#[test]
+fn parse_for_loops() {
+    let source = "
+int main() {
+    for (int i = 0; i < 3; i + 1) {
+        x = i;
+    }
+
+    for (int i = 0; i < 3; i + 1) x = i;
+
+    for (;;) x = 1;
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![
+            for_loop(
+                Some(Statement::DeclAssignment(identifier("i"), Expr::Integer(0))),
+                Some(binary(
+                    BinaryOp::Less,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(3),
+                )),
+                Some(binary(
+                    BinaryOp::Add,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(1),
+                )),
+                Statement::Block(Block {
+                    statements: vec![Statement::Assign(
+                        identifier("x"),
+                        Expr::Variable(identifier("i")),
+                    )],
+                })
+            ),
+            for_loop(
+                Some(Statement::DeclAssignment(identifier("i"), Expr::Integer(0))),
+                Some(binary(
+                    BinaryOp::Less,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(3),
+                )),
+                Some(binary(
+                    BinaryOp::Add,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(1),
+                )),
+                Statement::Assign(identifier("x"), Expr::Variable(identifier("i"))),
+            ),
+            for_loop(
+                None,
+                None,
+                None,
+                Statement::Assign(identifier("x"), Expr::Integer(1)),
+            ),
+        ]
+    );
+}
+
+#[test]
+fn parse_for_loops_with_omitted_header_parts() {
+    // each of init/condition/update may be omitted
+    let source = "
+int main() {
+    for (; z;) x = 1;
+
+    for (i = 0;;) x = i;
+
+    for (i = 0; i < 3;) x = i;
+
+    for (i = 0; i < 3;) { x = i; }
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![
+            for_loop(
+                None,
+                Some(Expr::Variable(identifier("z"))),
+                None,
+                Statement::Assign(identifier("x"), Expr::Integer(1)),
+            ),
+            for_loop(
+                Some(Statement::Assign(identifier("i"), Expr::Integer(0))),
+                None,
+                None,
+                Statement::Assign(identifier("x"), Expr::Variable(identifier("i"))),
+            ),
+            for_loop(
+                Some(Statement::Assign(identifier("i"), Expr::Integer(0))),
+                Some(binary(
+                    BinaryOp::Less,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(3),
+                )),
+                None,
+                Statement::Assign(identifier("x"), Expr::Variable(identifier("i"))),
+            ),
+            for_loop(
+                Some(Statement::Assign(identifier("i"), Expr::Integer(0))),
+                Some(binary(
+                    BinaryOp::Less,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(3),
+                )),
+                None,
+                Statement::Block(Block {
+                    statements: vec![Statement::Assign(
+                        identifier("x"),
+                        Expr::Variable(identifier("i")),
+                    )],
+                }),
+            ),
         ]
     );
 }
