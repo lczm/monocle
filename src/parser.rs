@@ -35,6 +35,9 @@ pub enum Expr {
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
+    // "x = expr", an assignment is an expression like in C, so it can
+    // appear anywhere an expression can, e.g. a for-loop update
+    Assign(Identifier, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -44,8 +47,6 @@ pub enum Statement {
     // todo: this will be changed to parsing some type in the future
     // declarations, but hardcoded to int for now
     Decl(Identifier),
-    // "x = expr;"
-    Assign(Identifier, Expr),
     // "int x = expr;"
     DeclAssignment(Identifier, Expr),
     // "if (expr) stmt" or "if (expr) stmt else stmt"
@@ -264,21 +265,6 @@ impl<'a> Parser<'a> {
             return Ok(Statement::Block(Block { statements }));
         }
 
-        // assignments like "x = expr;"
-        if let Some(TokenKind::Identifier(name)) = self.peek() {
-            let span = self.iter.peek().unwrap().span;
-            self.iter.next();
-            let ident = Identifier { name, span };
-            if self.peek() == Some(TokenKind::Equal) {
-                self.iter.next();
-                let value = self.parse_expr()?;
-                self.expect(TokenKind::Semicolon, "';'")?;
-                return Ok(Statement::Assign(ident, value));
-            }
-            self.expect(TokenKind::Semicolon, "';'")?;
-            return Ok(Statement::Expr(Expr::Variable(ident)));
-        }
-
         let expr = self.parse_expr()?;
 
         // statements should consume their own ;
@@ -287,7 +273,21 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_logical_or()
+        self.parse_assignment()
+    }
+
+    // assignment = logical_or | identifier "=" assignment
+    fn parse_assignment(&mut self) -> Result<Expr, ParseError> {
+        let lhs = self.parse_logical_or()?;
+        if self.peek() == Some(TokenKind::Equal) {
+            self.iter.next();
+            let rhs = self.parse_assignment()?;
+            if let Expr::Variable(identifier) = lhs {
+                return Ok(Expr::Assign(identifier, Box::new(rhs)));
+            }
+            return Err(self.expected_error("an identifier on the left of '='"));
+        }
+        Ok(lhs)
     }
 
     // logical_or = logical_and (("||") logical_and)*

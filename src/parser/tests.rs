@@ -276,14 +276,14 @@ int main() {
         parse_stmts(source).unwrap(),
         vec![
             Statement::Decl(identifier("x")),
-            Statement::Assign(
+            Statement::Expr(Expr::Assign(
                 identifier("x"),
-                binary(
+                Box::new(binary(
                     BinaryOp::Add,
                     Expr::Integer(1),
                     binary(BinaryOp::Multiply, Expr::Integer(2), Expr::Integer(3)),
-                )
-            ),
+                ))
+            )),
         ]
     );
 
@@ -298,7 +298,7 @@ int main() {
         parse_stmts(source).unwrap(),
         vec![
             Statement::Decl(identifier("x")),
-            Statement::Assign(identifier("x"), Expr::Integer(5)),
+            Statement::Expr(Expr::Assign(identifier("x"), Box::new(Expr::Integer(5)))),
             Statement::Return(binary(
                 BinaryOp::Add,
                 Expr::Variable(identifier("x")),
@@ -330,7 +330,7 @@ int main() {
     match statements.as_slice() {
         [
             Statement::Decl(x),
-            Statement::Assign(y, _),
+            Statement::Expr(Expr::Assign(y, _)),
             Statement::Return(Expr::Binary { lhs, .. }),
         ] => {
             assert_ident(x, "x", 22..23);
@@ -479,16 +479,22 @@ int main() {
         vec![
             Statement::If {
                 condition: Expr::Integer(1),
-                then: Box::new(Statement::Assign(identifier("x"), Expr::Integer(2))),
+                then: Box::new(Statement::Expr(Expr::Assign(
+                    identifier("x"),
+                    Box::new(Expr::Integer(2))
+                ))),
                 else_stmt: None,
             },
             Statement::If {
                 condition: Expr::Variable(identifier("x")),
-                then: Box::new(Statement::Assign(identifier("y"), Expr::Integer(1))),
-                else_stmt: Some(Box::new(Statement::Assign(
+                then: Box::new(Statement::Expr(Expr::Assign(
                     identifier("y"),
-                    Expr::Integer(2)
+                    Box::new(Expr::Integer(1))
                 ))),
+                else_stmt: Some(Box::new(Statement::Expr(Expr::Assign(
+                    identifier("y"),
+                    Box::new(Expr::Integer(2))
+                )))),
             },
         ]
     );
@@ -506,12 +512,18 @@ int main() {
         vec![
             Statement::While {
                 condition: Expr::Variable(identifier("z")),
-                body: Box::new(Statement::Assign(identifier("x"), Expr::Integer(1))),
+                body: Box::new(Statement::Expr(Expr::Assign(
+                    identifier("x"),
+                    Box::new(Expr::Integer(1))
+                ))),
             },
             Statement::While {
                 condition: Expr::Variable(identifier("y")),
                 body: Box::new(Statement::Block(Block {
-                    statements: vec![Statement::Assign(identifier("z"), Expr::Integer(2))],
+                    statements: vec![Statement::Expr(Expr::Assign(
+                        identifier("z"),
+                        Box::new(Expr::Integer(2)),
+                    ))],
                 })),
             },
         ]
@@ -546,10 +558,10 @@ int main() {
                     Expr::Integer(1),
                 )),
                 Statement::Block(Block {
-                    statements: vec![Statement::Assign(
+                    statements: vec![Statement::Expr(Expr::Assign(
                         identifier("x"),
-                        Expr::Variable(identifier("i")),
-                    )],
+                        Box::new(Expr::Variable(identifier("i")),)
+                    ))],
                 })
             ),
             for_loop(
@@ -564,13 +576,16 @@ int main() {
                     Expr::Variable(identifier("i")),
                     Expr::Integer(1),
                 )),
-                Statement::Assign(identifier("x"), Expr::Variable(identifier("i"))),
+                Statement::Expr(Expr::Assign(
+                    identifier("x"),
+                    Box::new(Expr::Variable(identifier("i")))
+                )),
             ),
             for_loop(
                 None,
                 None,
                 None,
-                Statement::Assign(identifier("x"), Expr::Integer(1)),
+                Statement::Expr(Expr::Assign(identifier("x"), Box::new(Expr::Integer(1)))),
             ),
         ]
     );
@@ -596,26 +611,41 @@ int main() {
                 None,
                 Some(Expr::Variable(identifier("z"))),
                 None,
-                Statement::Assign(identifier("x"), Expr::Integer(1)),
+                Statement::Expr(Expr::Assign(identifier("x"), Box::new(Expr::Integer(1)))),
             ),
             for_loop(
-                Some(Statement::Assign(identifier("i"), Expr::Integer(0))),
+                Some(Statement::Expr(Expr::Assign(
+                    identifier("i"),
+                    Box::new(Expr::Integer(0))
+                ))),
                 None,
                 None,
-                Statement::Assign(identifier("x"), Expr::Variable(identifier("i"))),
+                Statement::Expr(Expr::Assign(
+                    identifier("x"),
+                    Box::new(Expr::Variable(identifier("i")))
+                )),
             ),
             for_loop(
-                Some(Statement::Assign(identifier("i"), Expr::Integer(0))),
+                Some(Statement::Expr(Expr::Assign(
+                    identifier("i"),
+                    Box::new(Expr::Integer(0))
+                ))),
                 Some(binary(
                     BinaryOp::Less,
                     Expr::Variable(identifier("i")),
                     Expr::Integer(3),
                 )),
                 None,
-                Statement::Assign(identifier("x"), Expr::Variable(identifier("i"))),
+                Statement::Expr(Expr::Assign(
+                    identifier("x"),
+                    Box::new(Expr::Variable(identifier("i")))
+                )),
             ),
             for_loop(
-                Some(Statement::Assign(identifier("i"), Expr::Integer(0))),
+                Some(Statement::Expr(Expr::Assign(
+                    identifier("i"),
+                    Box::new(Expr::Integer(0))
+                ))),
                 Some(binary(
                     BinaryOp::Less,
                     Expr::Variable(identifier("i")),
@@ -623,14 +653,76 @@ int main() {
                 )),
                 None,
                 Statement::Block(Block {
-                    statements: vec![Statement::Assign(
+                    statements: vec![Statement::Expr(Expr::Assign(
                         identifier("x"),
-                        Expr::Variable(identifier("i")),
-                    )],
+                        Box::new(Expr::Variable(identifier("i")),)
+                    ))],
                 }),
             ),
         ]
     );
+}
+
+#[test]
+fn parse_assignment_expression_is_right_associative() {
+    // `a = b = 3` assigns 3 to b, then the result (3) to a, like C
+    let source = "
+int main() {
+    a = b = 3;
+
+    (a = 3);
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![
+            Statement::Expr(Expr::Assign(
+                identifier("a"),
+                Box::new(Expr::Assign(identifier("b"), Box::new(Expr::Integer(3))),)
+            )),
+            Statement::Expr(Expr::Assign(identifier("a"), Box::new(Expr::Integer(3)))),
+        ]
+    );
+}
+
+#[test]
+fn parse_update_can_be_an_assignment_expression() {
+    // `i = i + 1` as the update, like C
+    let source = "
+int main() {
+    for (int i = 0; i < 3; i = i + 1) x = i;
+}";
+    assert_eq!(
+        parse_stmts(source).unwrap(),
+        vec![for_loop(
+            Some(Statement::DeclAssignment(identifier("i"), Expr::Integer(0))),
+            Some(binary(
+                BinaryOp::Less,
+                Expr::Variable(identifier("i")),
+                Expr::Integer(3),
+            )),
+            Some(Expr::Assign(
+                identifier("i"),
+                Box::new(binary(
+                    BinaryOp::Add,
+                    Expr::Variable(identifier("i")),
+                    Expr::Integer(1),
+                )),
+            )),
+            Statement::Expr(Expr::Assign(
+                identifier("x"),
+                Box::new(Expr::Variable(identifier("i")))
+            )),
+        )]
+    );
+}
+
+#[test]
+fn parse_assignment_to_a_non_identifier_is_rejected() {
+    let source = "
+int main() {
+    1 = 2;
+}";
+    assert!(parse_stmts(source).is_err());
 }
 
 #[test]
@@ -646,11 +738,14 @@ int main() {
             condition: Expr::Variable(identifier("a")),
             then: Box::new(Statement::If {
                 condition: Expr::Variable(identifier("b")),
-                then: Box::new(Statement::Assign(identifier("x"), Expr::Integer(1))),
-                else_stmt: Some(Box::new(Statement::Assign(
+                then: Box::new(Statement::Expr(Expr::Assign(
                     identifier("x"),
-                    Expr::Integer(2)
+                    Box::new(Expr::Integer(1))
                 ))),
+                else_stmt: Some(Box::new(Statement::Expr(Expr::Assign(
+                    identifier("x"),
+                    Box::new(Expr::Integer(2))
+                )))),
             }),
             else_stmt: None,
         }]
@@ -706,7 +801,7 @@ int main() {
         vec![Statement::Block(Block {
             statements: vec![
                 Statement::Decl(identifier("x")),
-                Statement::Assign(identifier("x"), Expr::Integer(1)),
+                Statement::Expr(Expr::Assign(identifier("x"), Box::new(Expr::Integer(1)))),
             ],
         })]
     );
