@@ -33,10 +33,6 @@ fn check_stmt(
             declare(identifier, scopes, source)?;
             check_expr(value, scopes, source)
         }
-        Statement::Assign(identifier, value) => {
-            check_identifier(identifier, scopes, source)?;
-            check_expr(value, scopes, source)
-        }
         Statement::If {
             condition,
             then,
@@ -112,6 +108,11 @@ fn check_expr(expr: &Expr, scopes: &[HashSet<String>], source: &str) -> Result<(
         }
         Expr::Variable(ident) => check_identifier(ident, scopes, source),
         Expr::Integer(_) => Ok(()),
+        Expr::Assign(identifier, value) => {
+            // same check as the statement form: writing needs the name declared
+            check_identifier(identifier, scopes, source)?;
+            check_expr(value, scopes, source)
+        }
     }
 }
 

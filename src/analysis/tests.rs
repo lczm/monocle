@@ -245,6 +245,26 @@ int main() {
 }
 
 #[test]
+fn undeclared_target_in_a_for_update_assignment_is_flagged() {
+    let source = "
+int main() {
+    int i;
+    for (i = 0; i < 3; z = i + 1) {
+        x = 1;
+    }
+}";
+    let error = analyze(source).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            AnalysisError::UndefinedVariable { span, name, .. }
+                if name == "z" && span.offset() == 48 && span.len() == 1
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn undeclared_variable_in_a_for_body_is_flagged() {
     let source = "
 int main() {
