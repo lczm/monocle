@@ -178,12 +178,6 @@ fn emit_statement(
         Statement::Decl(_) => {
             declare_slot(frame, slot_index, scopes)?;
         }
-        // emit the value lands to a0 then we store it into names slot
-        Statement::Assign(identifier, value) => {
-            emit_expr(value, assembly, next_label, scopes)?;
-            let offset = lookup_slot(scopes, &identifier.name)?;
-            emit_line(assembly, &format!("sd a0, {offset}(s0)"));
-        }
         // declaration first, so the initializer can reference the name
         Statement::DeclAssignment(_, value) => {
             let offset = declare_slot(frame, slot_index, scopes)?;
@@ -327,6 +321,12 @@ fn emit_expr(
             if *op == UnaryOp::Minus {
                 emit_line(assembly, "neg a0, a0");
             }
+            Ok(())
+        }
+        Expr::Assign(identifier, value) => {
+            emit_expr(value, assembly, next_label, scopes)?;
+            let offset = lookup_slot(scopes, &identifier.name)?;
+            emit_line(assembly, &format!("sd a0, {offset}(s0)"));
             Ok(())
         }
         Expr::Binary { op, lhs, rhs } => {
