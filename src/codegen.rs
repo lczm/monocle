@@ -18,6 +18,9 @@ fn build_frame(body: &Block) -> Frame {
     }
 }
 
+// there is a problem if the walks drift apart
+// todo : think of a way to make this cleaner
+// maybe emit into a buffer then prepend the frame size on codegen so only walk once
 fn collect_slots(statements: &[Statement], slots: &mut Vec<(String, i32)>, next_offset: &mut i32) {
     for statement in statements {
         match statement {
@@ -26,15 +29,26 @@ fn collect_slots(statements: &[Statement], slots: &mut Vec<(String, i32)>, next_
                 *next_offset += 8;
             }
             Statement::Block(Block { statements }) => collect_slots(statements, slots, next_offset),
-            // a for-init statement can also declare a name, and its slot lives in this frame;
-            // init is a single statement, so borrow it as a 1-element slice to recurse
-            Statement::For {
-                init: Some(init), ..
+            Statement::If {
+                then, else_stmt, ..
             } => {
-                collect_slots(std::slice::from_ref(init.as_ref()), slots, next_offset);
+                collect_slots(std::slice::from_ref(then.as_ref()), slots, next_offset);
+                if let Some(else_stmt) = else_stmt {
+                    collect_slots(std::slice::from_ref(else_stmt.as_ref()), slots, next_offset);
+                }
             }
-            // nothing else can declare new names
-            _ => {}
+            Statement::While { body, .. } => {
+                collect_slots(std::slice::from_ref(body.as_ref()), slots, next_offset);
+            }
+            // init can declare names, and body can declare its own names
+            Statement::For { init, body, .. } => {
+                if let Some(init) = init {
+                    collect_slots(std::slice::from_ref(init.as_ref()), slots, next_offset);
+                }
+                collect_slots(std::slice::from_ref(body.as_ref()), slots, next_offset);
+            }
+            // these statements cannot declare names
+            Statement::Expr(_) | Statement::Return(_) => {}
         }
     }
 }

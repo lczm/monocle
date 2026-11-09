@@ -410,6 +410,111 @@ main:
 }
 
 #[test]
+fn declarations_inside_while_bodies_get_slots() {
+    let source = "
+int main() {
+    while (0) { int y = 1; }
+    return 0;
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	mv s0, sp
+.Lcond0:
+	li a0, 0
+	beqz a0, .Lend0
+	li a0, 1
+	sd a0, 0(s0)
+	j .Lcond0
+.Lend0:
+	li a0, 0
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+}
+
+#[test]
+fn declarations_inside_if_branches_get_slots() {
+    let source = "
+int main() {
+    if (0) { int a = 1; } else { int b = 2; }
+    return 0;
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	mv s0, sp
+	li a0, 0
+	beqz a0, .Lelse0
+	li a0, 1
+	sd a0, 0(s0)
+	j .Lend0
+.Lelse0:
+	li a0, 2
+	sd a0, 8(s0)
+.Lend0:
+	li a0, 0
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+}
+
+#[test]
+fn declarations_inside_for_bodies_get_slots() {
+    let source = "
+int main() {
+    for (int i = 0; i < 1; i = i + 1) { int y = 2; }
+    return 0;
+}";
+    let expected = r#"
+	.text
+	.globl main
+main:
+	addi sp, sp, -16
+	mv s0, sp
+	li a0, 0
+	sd a0, 0(s0)
+.Lcond0:
+	ld a0, 0(s0)
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 1
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	slt a0, t0, a0
+	beqz a0, .Lend0
+	li a0, 2
+	sd a0, 8(s0)
+	ld a0, 0(s0)
+	addi sp, sp, -16
+	sd a0, 0(sp)
+	li a0, 1
+	ld t0, 0(sp)
+	addi sp, sp, 16
+	add a0, t0, a0
+	sd a0, 0(s0)
+	j .Lcond0
+.Lend0:
+	li a0, 0
+	j .Lmain_end
+.Lmain_end:
+	addi sp, sp, 16
+	ret
+"#;
+    asm_eq(compile(source), expected);
+}
+
+#[test]
 fn shadows_resolve_to_the_innermost_live_scope() {
     // after the block ends, its x is gone: return reads the outer x's slot
     let source = "
